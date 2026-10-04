@@ -16,7 +16,7 @@ Tests run headless: `tests/conftest.py` sets `QT_QPA_PLATFORM=offscreen`. There 
 
 ## Architecture
 
-The app is an XMind-style mind map editor. `README.md` is the source of truth for user-facing key bindings and drag-and-drop behaviour; keep it in sync when changing either.
+The app is an XMind-style mind map editor. `docs/usage.md` is the source of truth for user-facing key bindings and drag-and-drop behaviour; keep it in sync when changing either.
 
 Layers, from pure to Qt-heavy:
 
