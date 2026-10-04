@@ -34,9 +34,16 @@ On macOS, `Ctrl` means `Cmd` and `Alt` means `Option`.
 | `Ctrl+N` / `Ctrl+O` / `Ctrl+S` / `Ctrl+Shift+S` | New / open / save / save as |
 | `Ctrl+Shift+L` | Show all shortcuts |
 
+## Drag and drop
+
+Drag a topic to move it, together with its subtopics. Drop it on the middle of
+another topic to make it a subtopic there, or on that topic's top or bottom edge
+to insert it before or after as a sibling. Press `Esc` while dragging to cancel.
+Moves can be undone.
+
 ## Layout
 
 - `src/mind_demo/model.py`: topic tree, editing operations, JSON (`.mind`) format
-- `src/mind_demo/layout.py`: balanced left/right layout and arrow-key navigation (no Qt dependency)
+- `src/mind_demo/layout.py`: balanced left/right layout, arrow-key navigation and drop zones (no Qt dependency)
 - `src/mind_demo/canvas.py`: `QGraphicsView` rendering, inline editing, snapshot-based undo
 - `src/mind_demo/app.py`: main window, menus and key bindings

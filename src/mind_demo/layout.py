@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Literal
 
 from .model import Topic
 
@@ -109,3 +110,34 @@ def neighbor(topic: Topic, direction: str, placements: dict[Topic, Placement]) -
         if q is not topic and qp.side == p.side and q.depth == depth and (qp.y - p.y) * d > 0
     ]
     return min(cands, key=lambda q: abs(placements[q].y - p.y), default=None)
+
+
+DROP_EDGE = 0.3  # top/bottom fraction of a topic that means "insert beside" rather than "make child"
+DROP_SLOP = 6
+
+
+@dataclass
+class DropTarget:
+    parent: Topic
+    index: int
+    anchor: Topic  # the topic under the cursor
+    kind: Literal["child", "before", "after"]
+
+
+def drop_target(
+    dragged: Topic, x: float, y: float, placements: dict[Topic, Placement]
+) -> DropTarget | None:
+    """Where ``dragged`` would land if dropped at scene point (x, y)."""
+    for t, p in placements.items():
+        if t is dragged or dragged.is_ancestor_of(t):
+            continue
+        if abs(x - p.x) > p.w / 2 + DROP_SLOP or abs(y - p.y) > p.h / 2 + DROP_SLOP:
+            continue
+        if t.parent is not None:
+            rel = (y - (p.y - p.h / 2)) / p.h
+            if rel < DROP_EDGE:
+                return DropTarget(t.parent, t.index, t, "before")
+            if rel > 1 - DROP_EDGE:
+                return DropTarget(t.parent, t.index + 1, t, "after")
+        return DropTarget(t, len(t.children), t, "child")
+    return None

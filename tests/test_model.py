@@ -67,3 +67,21 @@ def test_outline_roundtrip():
     root = tree()
     [parsed] = model.parse_outline(model.outline_text(root))
     assert parsed.to_dict() == root.to_dict()
+
+
+def test_reparent():
+    root = tree()
+    a, b = root.children
+    a1 = a.children[0]
+    assert model.reparent(a1, b, 0) is a1 and a1.parent is b and not a.children
+    assert model.reparent(a, a, 0) is None  # onto itself
+    assert model.reparent(b, a1, 0) is None  # into its own descendant
+    assert model.reparent(root, a, 0) is None
+
+
+def test_reparent_reorders_within_parent():
+    root = Topic("r")
+    a, b, c = (root.add(Topic(x)) for x in "abc")
+    assert model.reparent(a, root, 3) is a and root.children == [b, c, a]
+    assert model.reparent(a, root, 3) is None  # already last
+    assert model.reparent(c, root, 0) is c and root.children == [c, b, a]

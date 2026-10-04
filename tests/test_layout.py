@@ -56,3 +56,24 @@ def test_navigation():
     # crossing between cousins at the same depth
     assert neighbor(r0.children[1], "down", p) is r1.children[0]
     assert neighbor(root, "up", p) is None
+
+
+def test_drop_target_zones():
+    from mind_demo.layout import drop_target
+
+    root = make(4)
+    p = layout(root, measure)
+    r0, r1, l0, _ = root.children
+    pr1 = p[r1]
+    mid = drop_target(r0, pr1.x, pr1.y, p)
+    assert (mid.parent, mid.index, mid.kind) == (r1, 2, "child")
+    top = drop_target(r0, pr1.x, pr1.y - 12, p)
+    assert (top.parent, top.index, top.kind) == (root, 1, "before")
+    bottom = drop_target(r0, pr1.x, pr1.y + 12, p)
+    assert (bottom.parent, bottom.index, bottom.kind) == (root, 2, "after")
+    on_root = drop_target(l0, 0, 0, p)
+    assert (on_root.parent, on_root.kind) == (root, "child")
+    # never onto itself or its own subtree, and nothing on empty canvas
+    assert drop_target(r0, p[r0].x, p[r0].y, p) is None
+    assert drop_target(r0, p[r0.children[0]].x, p[r0.children[0]].y, p) is None
+    assert drop_target(r0, 5000, 5000, p) is None

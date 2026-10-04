@@ -185,6 +185,21 @@ def move(topic: Topic, delta: int) -> Topic | None:
     return topic
 
 
+def reparent(topic: Topic, parent: Topic, index: int) -> Topic | None:
+    """Move ``topic`` to ``parent.children[index]`` (index as seen before the move)."""
+    if topic.parent is None or topic is parent or topic.is_ancestor_of(parent):
+        return None
+    if topic.parent is parent:
+        old = topic.index
+        if index > old:
+            index -= 1
+        if index == old:
+            return None
+    topic.detach()
+    parent.collapsed = False
+    return parent.add(topic, index)
+
+
 def paste(target: Topic, subtree: Topic) -> Topic:
     target.collapsed = False
     return target.add(subtree)

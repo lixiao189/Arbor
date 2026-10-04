@@ -6,7 +6,7 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from PyQt6.QtCore import QMimeData, QPointF, QRectF, Qt, pyqtSignal
+from PyQt6.QtCore import QMimeData, QPointF, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QBrush,
     QColor,
@@ -34,7 +34,7 @@ from PyQt6.QtWidgets import (
 )
 
 from . import model
-from .layout import Placement, layout, neighbor
+from .layout import DropTarget, Placement, drop_target, layout, neighbor
 from .model import Topic
 
 MIME_TYPE = "application/x-mind-demo-topic"
@@ -45,6 +45,7 @@ SUB_TEXT = QColor("#2B2B2B")
 PALETTE = [QColor(c) for c in ("#E8594A", "#F29B38", "#E9C33B", "#4DB86C", "#3D9BE0", "#8E6BD8")]
 MAX_TEXT_WIDTH = 280
 MIN_ZOOM, MAX_ZOOM = 0.2, 4.0
+DRAG_DIM = 0.35
 
 
 @dataclass(frozen=True)
@@ -197,6 +198,27 @@ class TopicItem(QGraphicsItem):
         self.canvas.select(self.topic)
         event.accept()
 
+    def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent) -> None:
+        canvas = self.canvas
+        if canvas.drag is None:
+            if (
+                not event.buttons() & Qt.MouseButton.LeftButton
+                or self.topic.is_root
+                or self.label.is_editing()
+            ):
+                return
+            moved = event.screenPos() - event.buttonDownScreenPos(Qt.MouseButton.LeftButton)
+            if moved.manhattanLength() < QApplication.startDragDistance():
+                return
+            canvas.begin_drag(self.topic)
+        canvas.update_drag(event.scenePos())
+
+    def mouseReleaseEvent(self, event: QGraphicsSceneMouseEvent) -> None:
+        if self.canvas.drag is not None:
+            # Dropping rebuilds the scene, which deletes this item: leave its handler first.
+            pos = event.scenePos()
+            QTimer.singleShot(0, lambda canvas=self.canvas: canvas.end_drag(pos))
+
     def mouseDoubleClickEvent(self, event: QGraphicsSceneMouseEvent) -> None:
         if not self.label.is_editing():
             self.canvas.select(self.topic)
@@ -239,6 +261,14 @@ class FoldBadge(QGraphicsItem):
         event.accept()
 
 
+@dataclass
+class DragState:
+    topic: Topic
+    ghost: TopicItem
+    indicator: QGraphicsPathItem
+    target: DropTarget | None = None
+
+
 class SnapshotCommand(QUndoCommand):
     """Undo step storing the whole document before and after a change."""
 
@@ -279,6 +309,7 @@ class MindMapView(QGraphicsView):
         self.items: dict[Topic, TopicItem] = {}
         self.placements: dict[Topic, Placement] = {}
         self.editing: TopicItem | None = None
+        self.drag: DragState | None = None
         self._edit_before: tuple | None = None
         self.rebuild()
 
@@ -320,6 +351,7 @@ class MindMapView(QGraphicsView):
     # --- rendering
 
     def rebuild(self) -> None:
+        self.drag = None
         scene = self.scene()
         scene.clear()
         self.items = {}
@@ -520,6 +552,79 @@ class MindMapView(QGraphicsView):
         self.commit_edit()
         self.add_child()
 
+    # --- drag and drop
+
+    def begin_drag(self, topic: Topic) -> None:
+        self.commit_edit()
+        ghost = TopicItem(topic, self)
+        ghost.setOpacity(0.75)
+        ghost.setZValue(10)
+        ghost.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+        indicator = QGraphicsPathItem()
+        indicator.setZValue(9)
+        indicator.setPen(make_pen(SELECTION, 3))
+        self.scene().addItem(ghost)
+        self.scene().addItem(indicator)
+        for t in topic.walk_visible():
+            self.items[t].setOpacity(DRAG_DIM)
+        self.drag = DragState(topic, ghost, indicator)
+
+    def update_drag(self, pos: QPointF) -> None:
+        drag = self.drag
+        if drag is None:
+            return
+        w, h = drag.ghost.size()
+        drag.ghost.setPos(pos + QPointF(w / 2 + 14, h / 2 + 10))  # below-right of the cursor
+        drag.target = drop_target(drag.topic, pos.x(), pos.y(), self.placements)
+        drag.indicator.setPath(self._indicator_path(drag.target))
+        self.ensureVisible(QRectF(pos, pos).adjusted(-30, -30, 30, 30), 0, 0)
+
+    def _indicator_path(self, target: DropTarget | None) -> QPainterPath:
+        path = QPainterPath()
+        if target is None:
+            return path
+        item = self.items[target.anchor]
+        rect = item.body_rect().translated(item.pos())
+        if target.kind == "child":
+            # Outline the new parent; if it has no visible children yet, also sketch
+            # a placeholder where the topic will go.
+            path.addRoundedRect(rect.adjusted(-4, -4, 4, 4), 8, 8)
+            if target.anchor.children and not target.anchor.collapsed:
+                return path
+            side = item.side or 1
+            x = rect.right() if side > 0 else rect.left()
+            stub = QRectF(0, 0, 34, 14)
+            stub.moveCenter(QPointF(x + side * 40, rect.center().y()))
+            path.moveTo(x + side * 4, rect.center().y())
+            path.lineTo(stub.left() if side > 0 else stub.right(), stub.center().y())
+            path.addRoundedRect(stub, 4, 4)
+        else:
+            y = rect.top() - 6 if target.kind == "before" else rect.bottom() + 6
+            path.addEllipse(QPointF(rect.left() - 4, y), 3, 3)
+            path.moveTo(rect.left(), y)
+            path.lineTo(rect.right(), y)
+        return path
+
+    def cancel_drag(self) -> None:
+        drag, self.drag = self.drag, None
+        if drag is None:
+            return
+        self.scene().removeItem(drag.ghost)
+        self.scene().removeItem(drag.indicator)
+        for t in drag.topic.walk_visible():
+            if t in self.items:
+                self.items[t].setOpacity(1.0)
+
+    def end_drag(self, pos: QPointF) -> None:
+        drag = self.drag
+        if drag is None:
+            return
+        self.update_drag(pos)
+        target = drag.target
+        self.cancel_drag()
+        if target is not None:
+            self.change("Move Topic", lambda: model.reparent(drag.topic, target.parent, target.index))
+
     # --- view
 
     def zoom_by(self, factor: float) -> None:
@@ -544,6 +649,10 @@ class MindMapView(QGraphicsView):
     # --- Qt events
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
+        if self.drag is not None:
+            if event.key() == Qt.Key.Key_Escape:
+                self.cancel_drag()
+            return
         # XMind: typing on a selected topic starts editing and replaces its text.
         text = event.text()
         mods = event.modifiers()
