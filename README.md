@@ -1,5 +1,7 @@
 # Arbor
 
+[![Tests](https://github.com/lixiao189/Arbor/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/lixiao189/Arbor/actions/workflows/tests.yml)
+
 Arbor is a small, keyboard-first mind map editor built with PyQt6. It borrows XMind's key bindings, so you can grow a map as fast as you can type: `Tab` adds a subtopic, `Enter` adds a sibling, and the arrow keys move around the tree. Topics spread out from the central topic in a balanced left/right layout.
 
 You can also drag topics to rearrange them, select several at once, collapse branches, paste plain-text outlines as topics, and undo any change. Maps are saved as plain JSON `.mind` files.
