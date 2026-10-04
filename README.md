@@ -8,6 +8,14 @@ Arbor is a small, keyboard-first mind map editor built with PyQt6. It borrows XM
 
 You can also drag topics to rearrange them, select several at once, collapse branches, paste plain-text outlines as topics, and undo any change. Maps are saved as plain JSON `.mind` files.
 
+## Download
+
+Arbor is in alpha. The latest [nightly build](https://github.com/lixiao189/Arbor/releases/tag/nightly) of `master` is rebuilt every day:
+
+- [macOS (Apple Silicon)](https://github.com/lixiao189/Arbor/releases/download/nightly/Arbor-macos-arm64.zip) – unsigned; right-click the app and choose Open the first time
+- [Windows (x86_64)](https://github.com/lixiao189/Arbor/releases/download/nightly/Arbor-windows-x86_64.zip)
+- [Linux (x86_64)](https://github.com/lixiao189/Arbor/releases/download/nightly/Arbor-linux-x86_64.tar.gz)
+
 ## Quick start
 
 Arbor needs [uv](https://docs.astral.sh/uv/) (Python 3.13).
