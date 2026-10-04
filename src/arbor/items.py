@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from functools import cache
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QFocusEvent, QFont, QKeyEvent, QPainter, QPen
+from PyQt6.QtGui import QColor, QFocusEvent, QFont, QKeyEvent, QPainter, QPen, QTextLayout, QTextOption
 from PyQt6.QtWidgets import (
     QApplication,
     QGraphicsItem,
@@ -28,6 +29,7 @@ TOGGLE_MODIFIERS = (
     Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier | Qt.KeyboardModifier.ShiftModifier
 )
 NO_WRAP = -1  # QGraphicsTextItem text width that disables wrapping
+UNWRAPPED_WIDTH = 1e6  # QTextLayout line width that effectively disables wrapping
 MIN_TEXT_WIDTH = 12  # keeps an empty topic clickable
 UNDERLINE_WIDTH = 2  # subtopics are drawn as an underline instead of a box
 SELECTION_WIDTH = 2.2
@@ -67,7 +69,47 @@ class TopicText(QGraphicsTextItem):
             self.committed.emit()
 
 
+@cache
+def label_font(size: int, bold: bool) -> QFont:
+    font = QFont()
+    font.setPointSize(size)
+    font.setBold(bold)
+    return font
+
+
+def layout_text(text: str, font: QFont) -> tuple[list[QTextLayout], float, float]:
+    """Lay out plain text the way an unwrapped-then-capped ``TopicText`` would.
+
+    Returns the laid-out paragraphs and the text's width and height.
+    """
+    option = QTextOption()
+    option.setWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+
+    def run(width: float) -> tuple[list[QTextLayout], float, float]:
+        layouts, natural, y = [], 0.0, 0.0
+        for paragraph in (text or " ").split("\n"):
+            tl = QTextLayout(paragraph, font)
+            tl.setTextOption(option)
+            tl.beginLayout()
+            while (line := tl.createLine()).isValid():
+                line.setLineWidth(width)
+                line.setPosition(QPointF(0, y))
+                y += line.height()
+                natural = max(natural, line.naturalTextWidth())
+            tl.endLayout()
+            layouts.append(tl)
+        return layouts, natural, y
+
+    layouts, natural, height = run(UNWRAPPED_WIDTH)
+    if natural <= MAX_TEXT_WIDTH:
+        return layouts, natural, height
+    layouts, _, height = run(MAX_TEXT_WIDTH)
+    return layouts, MAX_TEXT_WIDTH, height
+
+
 class TopicItem(QGraphicsItem):
+    """A topic's body. Its text is painted directly; a ``TopicText`` exists only while editing."""
+
     def __init__(self, topic: Topic, canvas: MindMapView) -> None:
         super().__init__()
         self.topic = topic
@@ -78,36 +120,60 @@ class TopicItem(QGraphicsItem):
         self.toggling = False  # this press was a Ctrl+click: no drag, no narrowing on release
         self.side = Side.CENTER
         self._w = self._h = 0.0
-
-        self.label = TopicText(self)
-        font = QFont()
-        font.setPointSize(self.style.font_size)
-        font.setBold(self.style.bold)
-        self.label.setFont(font)
-        self.label.setDefaultTextColor(Qt.GlobalColor.white if self.style.filled else SUB_TEXT)
-        self.label.document().setDocumentMargin(0)
+        self.font = label_font(self.style.font_size, self.style.bold)
+        self.text_color = QColor(Qt.GlobalColor.white) if self.style.filled else SUB_TEXT
+        self.label: TopicText | None = None  # the inline editor, while editing
+        self._layouts: list[QTextLayout] = []
+        self._text_rect = QRectF()
         self.set_text(topic.text)
-        self.label.document().contentsChanged.connect(self._on_text_changed)
         self.setZValue(Z.TOPIC)
 
-    def set_text(self, text: str) -> None:
-        self.label.setTextWidth(NO_WRAP)
-        self.label.setPlainText(text or " ")
-        self._fit()
+    def is_editing(self) -> bool:
+        return self.label is not None
 
-    def _fit(self) -> None:
-        self.label.setTextWidth(NO_WRAP)
-        if self.label.boundingRect().width() > MAX_TEXT_WIDTH:
-            self.label.setTextWidth(MAX_TEXT_WIDTH)
-        r = self.label.boundingRect()
+    def set_text(self, text: str) -> None:
+        self._layouts, w, h = layout_text(text, self.font)
+        self._set_text_size(w, h)
+
+    def open_editor(self) -> TopicText:
+        label = self.label = TopicText(self)
+        label.setFont(self.font)
+        label.setDefaultTextColor(self.text_color)
+        label.document().setDocumentMargin(0)
+        label.setPlainText(self.topic.text or " ")
+        label.document().contentsChanged.connect(self._on_text_changed)
+        self._fit_editor()
+        self.update()
+        return label
+
+    def close_editor(self) -> str:
+        """Remove the editor and return its text; the caller sets the text to show."""
+        label, self.label = self.label, None
+        text = label.toPlainText()
+        label.document().contentsChanged.disconnect(self._on_text_changed)
+        if label.scene() is not None:
+            label.scene().removeItem(label)
+        self.update()
+        return text
+
+    def _fit_editor(self) -> None:
+        label = self.label
+        label.setTextWidth(NO_WRAP)
+        if label.boundingRect().width() > MAX_TEXT_WIDTH:
+            label.setTextWidth(MAX_TEXT_WIDTH)
+        r = label.boundingRect()
+        self._set_text_size(r.width(), r.height())
+        label.setPos(self._text_rect.topLeft())
+
+    def _set_text_size(self, w: float, h: float) -> None:
         self.prepareGeometryChange()
-        self._w = max(r.width(), MIN_TEXT_WIDTH) + 2 * self.style.pad_x
-        self._h = r.height() + 2 * self.style.pad_y
-        self.label.setPos(-r.width() / 2, -r.height() / 2)
+        self._text_rect = QRectF(-w / 2, -h / 2, w, h)
+        self._w = max(w, MIN_TEXT_WIDTH) + 2 * self.style.pad_x
+        self._h = h + 2 * self.style.pad_y
 
     def _on_text_changed(self) -> None:
-        if self.label.is_editing():
-            self._fit()
+        if self.label is not None and self.label.is_editing():
+            self._fit_editor()
             self.canvas.apply_layout()
 
     def size(self) -> tuple[float, float]:
@@ -134,6 +200,10 @@ class TopicItem(QGraphicsItem):
             painter.setBrush(Qt.BrushStyle.NoBrush)
             r = self.style.radius + SELECTION_RADIUS_EXTRA
             painter.drawRoundedRect(rect.adjusted(-SELECTION_GAP, -SELECTION_GAP, SELECTION_GAP, SELECTION_GAP), r, r)
+        if self.label is None:
+            painter.setPen(self.text_color)
+            for tl in self._layouts:
+                tl.draw(painter, self._text_rect.topLeft())
 
     def anchor_out(self) -> QPointF:
         """Where edges to this topic's children start."""
@@ -165,7 +235,7 @@ class TopicItem(QGraphicsItem):
                 not event.buttons() & Qt.MouseButton.LeftButton
                 or self.topic.is_root
                 or self.toggling
-                or self.label.is_editing()
+                or self.is_editing()
             ):
                 return
             moved = event.screenPos() - event.buttonDownScreenPos(Qt.MouseButton.LeftButton)
@@ -183,7 +253,7 @@ class TopicItem(QGraphicsItem):
             self.canvas.select(self.topic)  # a click without dragging selects just this topic
 
     def mouseDoubleClickEvent(self, event: QGraphicsSceneMouseEvent) -> None:
-        if not self.label.is_editing():
+        if not self.is_editing():
             self.canvas.select(self.topic)
             self.canvas.start_edit()
         event.accept()

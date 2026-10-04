@@ -258,7 +258,7 @@ class MindMapView(QGraphicsView):
         item = self.items[self.selected]
         self.editing = item
         self._edit_before = self.snapshot()
-        label = item.label
+        label = item.open_editor()
         label.setTextInteractionFlags(Qt.TextInteractionFlag.TextEditorInteraction)
         label.committed.connect(self.commit_edit, Qt.ConnectionType.QueuedConnection)
         label.cancelled.connect(self.cancel_edit, Qt.ConnectionType.QueuedConnection)
@@ -274,7 +274,8 @@ class MindMapView(QGraphicsView):
         label.setTextCursor(cursor)
         self.editingChanged.emit(True)
 
-    def _end_edit(self) -> TopicItem | None:
+    def _end_edit(self) -> tuple[TopicItem, str] | None:
+        """Close the editor; returns the edited item and the editor's text."""
         item, self.editing = self.editing, None
         if item is None:
             return None
@@ -282,19 +283,18 @@ class MindMapView(QGraphicsView):
         for sig in (label.committed, label.cancelled, label.tab_pressed):
             sig.disconnect()
         label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
-        cursor = label.textCursor()
-        cursor.clearSelection()
-        label.setTextCursor(cursor)
         label.clearFocus()
+        text = item.close_editor()
         self.setFocus()
         self.editingChanged.emit(False)
-        return item
+        return item, text
 
     def commit_edit(self) -> None:
-        item = self._end_edit()
-        if item is None:
+        ended = self._end_edit()
+        if ended is None:
             return
-        text = item.label.toPlainText().strip()
+        item, text = ended
+        text = text.strip()
         topic = item.topic
         if text and text != topic.text:
             topic.text = text
@@ -302,8 +302,9 @@ class MindMapView(QGraphicsView):
         self.rebuild()
 
     def cancel_edit(self) -> None:
-        item = self._end_edit()
-        if item is not None:
+        ended = self._end_edit()
+        if ended is not None:
+            item = ended[0]
             item.set_text(item.topic.text)
             self.apply_layout()
 
