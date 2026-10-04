@@ -1,0 +1,19 @@
+name: Lint workflows
+
+on:
+  push:
+    branches: [master]
+    paths: [".github/workflows/**"]
+  # No path filter: actionlint is a required check on master.
+  pull_request:
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+
+      # shellcheck is preinstalled on the runner; actionlint uses it for run: blocks.
+      - name: Run actionlint
+        run: uvx --from actionlint-py actionlint -color
