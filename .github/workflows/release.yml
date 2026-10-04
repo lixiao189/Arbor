@@ -61,15 +61,11 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Write launcher script
-        shell: bash
-        run: printf 'from arbor import main\n\nmain()\n' > launcher.py
-
       - name: Build app bundle
         shell: bash
         run: >
           uv run --locked --with pyinstaller
-          pyinstaller --noconfirm --windowed --name Arbor launcher.py
+          pyinstaller --noconfirm packaging/arbor.spec
 
       - name: Package (macOS)
         if: runner.os == 'macOS'
