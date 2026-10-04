@@ -1,15 +1,10 @@
 name: Build
 
 # Builds the Python distributions and the app bundles for every platform.
-# Called by the nightly and release workflows, and run on its own for pull
-# requests that touch packaging.
+# Called by the nightly and release workflows, and run on its own for every
+# pull request (its jobs are required checks on master).
 on:
   pull_request:
-    paths:
-      - "packaging/**"
-      - ".github/workflows/**"
-      - "pyproject.toml"
-      - "uv.lock"
   workflow_call:
 
 jobs:

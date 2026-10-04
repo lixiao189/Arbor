@@ -4,8 +4,8 @@ on:
   push:
     branches: [master]
     paths: [".github/workflows/**"]
+  # No path filter: actionlint is a required check on master.
   pull_request:
-    paths: [".github/workflows/**"]
 
 jobs:
   actionlint:
