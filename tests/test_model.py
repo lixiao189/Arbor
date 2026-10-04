@@ -50,6 +50,17 @@ def test_remove_selects_neighbour():
     assert model.remove(root) is None
 
 
+def test_remove_all_skips_root_and_nested_topics():
+    root = tree()
+    a, b = root.children
+    a1 = a.children[0]
+    assert model.top_level([a1, a, b]) == [a, b]
+    assert model.remove_all([root]) is None
+    assert model.remove_all([a1, root, a]) is b
+    assert root.children == [b]
+    assert model.remove_all([b]) is root
+
+
 def test_move():
     root = tree()
     a, b = root.children
@@ -85,3 +96,15 @@ def test_reparent_reorders_within_parent():
     assert model.reparent(a, root, 3) is a and root.children == [b, c, a]
     assert model.reparent(a, root, 3) is None  # already last
     assert model.reparent(c, root, 0) is c and root.children == [c, b, a]
+
+
+def test_reparent_all_keeps_document_order():
+    root = Topic("root")
+    a, b, c, d = (root.add(Topic(n)) for n in "abcd")
+    a1 = a.add(Topic("a1"))
+    assert model.reparent_all([c, a1, a], d, 0) is a  # a1 travels inside a
+    assert [t.text for t in d.children] == ["a", "c"] and a.children == [a1]
+    assert model.reparent_all([b, d], root, 0) is None  # already there
+    assert model.reparent_all([b], root, 2) is b and root.children == [d, b]
+    assert model.reparent_all([d], a1, 0) is None  # into its own subtree
+    assert model.reparent_all([root], b, 0) is None

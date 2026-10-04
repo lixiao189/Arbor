@@ -77,3 +77,5 @@ def test_drop_target_zones():
     assert drop_target(r0, p[r0].x, p[r0].y, p) is None
     assert drop_target(r0, p[r0.children[0]].x, p[r0.children[0]].y, p) is None
     assert drop_target(r0, 5000, 5000, p) is None
+    assert drop_target([l0, r0], p[r0].x, p[r0].y, p) is None  # any topic of a dragged group
+    assert drop_target([l0, r0], pr1.x, pr1.y, p) is not None

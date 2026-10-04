@@ -6,13 +6,14 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from PyQt6.QtCore import QMimeData, QPointF, QRectF, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QMimeData, QPoint, QPointF, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QBrush,
     QColor,
     QFocusEvent,
     QFont,
     QKeyEvent,
+    QMouseEvent,
     QPainter,
     QPainterPath,
     QPen,
@@ -25,6 +26,7 @@ from PyQt6.QtWidgets import (
     QApplication,
     QGraphicsItem,
     QGraphicsPathItem,
+    QGraphicsRectItem,
     QGraphicsScene,
     QGraphicsSceneMouseEvent,
     QGraphicsTextItem,
@@ -46,6 +48,11 @@ PALETTE = [QColor(c) for c in ("#E8594A", "#F29B38", "#E9C33B", "#4DB86C", "#3D9
 MAX_TEXT_WIDTH = 280
 MIN_ZOOM, MAX_ZOOM = 0.2, 4.0
 DRAG_DIM = 0.35
+# Modifiers for toggling a topic in the selection. On macOS Qt reports Cmd as Control and the
+# physical Ctrl key as Meta (and turns Ctrl+click into a right-click), so accept all of them.
+TOGGLE_MODIFIERS = (
+    Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier | Qt.KeyboardModifier.ShiftModifier
+)
 
 
 @dataclass(frozen=True)
@@ -121,6 +128,7 @@ class TopicItem(QGraphicsItem):
         self.style = style_for(topic)
         self.color = branch_color(topic)
         self.selected = False
+        self.toggling = False  # this press was a Ctrl+click: no drag, no narrowing on release
         self.side = 0
         self._w = self._h = 0.0
 
@@ -195,7 +203,12 @@ class TopicItem(QGraphicsItem):
 
     def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
         # While editing, clicks on the text are taken by the label itself.
-        self.canvas.select(self.topic)
+        # Pressing a topic of a multi-selection keeps the group so it can be dragged.
+        self.toggling = bool(event.modifiers() & TOGGLE_MODIFIERS)
+        if self.toggling:
+            self.canvas.toggle_selected(self.topic)
+        elif self.topic not in self.canvas.selection:
+            self.canvas.select(self.topic)
         event.accept()
 
     def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent) -> None:
@@ -204,6 +217,7 @@ class TopicItem(QGraphicsItem):
             if (
                 not event.buttons() & Qt.MouseButton.LeftButton
                 or self.topic.is_root
+                or self.toggling
                 or self.label.is_editing()
             ):
                 return
@@ -218,6 +232,8 @@ class TopicItem(QGraphicsItem):
             # Dropping rebuilds the scene, which deletes this item: leave its handler first.
             pos = event.scenePos()
             QTimer.singleShot(0, lambda canvas=self.canvas: canvas.end_drag(pos))
+        elif event.button() == Qt.MouseButton.LeftButton and len(self.canvas.selection) > 1 and not self.toggling:
+            self.canvas.select(self.topic)  # a click without dragging selects just this topic
 
     def mouseDoubleClickEvent(self, event: QGraphicsSceneMouseEvent) -> None:
         if not self.label.is_editing():
@@ -263,10 +279,18 @@ class FoldBadge(QGraphicsItem):
 
 @dataclass
 class DragState:
-    topic: Topic
+    topic: Topic  # the topic under the cursor, shown as the ghost
+    topics: list[Topic]  # everything being moved
     ghost: TopicItem
     indicator: QGraphicsPathItem
     target: DropTarget | None = None
+
+
+@dataclass
+class Marquee:
+    origin: QPointF
+    band: QGraphicsRectItem
+    before: list[Topic]  # selection to restore on Esc
 
 
 class SnapshotCommand(QUndoCommand):
@@ -296,7 +320,6 @@ class MindMapView(QGraphicsView):
         self.setScene(QGraphicsScene(self))
         self.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.TextAntialiasing)
         self.setBackgroundBrush(QBrush(CANVAS_BG))
-        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.FullViewportUpdate)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -305,11 +328,14 @@ class MindMapView(QGraphicsView):
 
         self.undo_stack = QUndoStack(self)
         self.root: Topic = model.new_document()
-        self.selected: Topic = self.root
+        self.selected: Topic | None = None  # primary selection: keyboard commands act on it
+        self.selection: list[Topic] = []  # all selected topics, primary first; may be empty
         self.items: dict[Topic, TopicItem] = {}
         self.placements: dict[Topic, Placement] = {}
         self.editing: TopicItem | None = None
         self.drag: DragState | None = None
+        self.marquee: Marquee | None = None
+        self._pan_from: QPoint | None = None  # last cursor position while right-dragging, in viewport coordinates
         self._edit_before: tuple | None = None
         self.rebuild()
 
@@ -317,21 +343,21 @@ class MindMapView(QGraphicsView):
 
     def set_document(self, root: Topic) -> None:
         self.cancel_edit()
-        self.root, self.selected = root, root
+        self.root, self.selected, self.selection = root, None, []
         self.undo_stack.clear()
         self.rebuild()
         self.resetTransform()
         self.center_root()
 
     def snapshot(self) -> tuple:
-        return self.root.to_dict(), self.selected.path()
+        return self.root.to_dict(), self.selected.path() if self.selected else None
 
     def restore(self, snap: tuple) -> None:
         self.cancel_edit()
         data, path = snap
         self.root = Topic.from_dict(data)
         try:
-            self.selected = self.root.at(path)
+            self.selected = self.root.at(path) if path is not None else None
         except IndexError:
             self.selected = self.root
         self.rebuild()
@@ -339,6 +365,8 @@ class MindMapView(QGraphicsView):
     def change(self, label: str, op: Callable[[], Topic | None]) -> bool:
         """Run a model operation as one undoable step; ``op`` returns the new selection."""
         self.commit_edit()
+        if self.selected is None:
+            return False  # every command acts on the selection
         before = self.snapshot()
         result = op()
         if result is None:
@@ -351,7 +379,7 @@ class MindMapView(QGraphicsView):
     # --- rendering
 
     def rebuild(self) -> None:
-        self.drag = None
+        self.drag = self.marquee = None
         scene = self.scene()
         scene.clear()
         self.items = {}
@@ -360,7 +388,10 @@ class MindMapView(QGraphicsView):
             scene.addItem(item)
             self.items[topic] = item
         self.apply_layout()
-        self.select(self.selected)
+        if self.selected is not None:
+            self.select(self.selected)
+        else:
+            self.set_selection([])
 
     def apply_layout(self) -> None:
         self.placements = layout(self.root, lambda t: self.items[t].size())
@@ -402,19 +433,35 @@ class MindMapView(QGraphicsView):
     # --- selection & navigation
 
     def select(self, topic: Topic) -> None:
-        if topic not in self.items:
-            topic = self.root
-        if self.selected in self.items:
-            self.items[self.selected].selected = False
-            self.items[self.selected].update()
-        self.selected = topic
-        item = self.items[topic]
-        item.selected = True
-        item.update()
-        self.ensureVisible(item, 60, 60)
+        self.set_selection([topic])
+        if self.selected is not None:
+            self.ensureVisible(self.items[self.selected], 60, 60)
+
+    def set_selection(self, topics: list[Topic]) -> None:
+        """Select several topics (or none); the first becomes the primary selection."""
+        topics = [t for t in topics if t in self.items]
+        for t in self.selection:
+            if t in self.items:
+                self.items[t].selected = False
+                self.items[t].update()
+        self.selection, self.selected = topics, topics[0] if topics else None
+        for t in topics:
+            self.items[t].selected = True
+            self.items[t].update()
         self.selectionChanged.emit()
 
+    def toggle_selected(self, topic: Topic) -> None:
+        """Ctrl+click: add ``topic`` to the selection, or remove it."""
+        self.commit_edit()
+        if topic not in self.selection:
+            self.set_selection([*self.selection, topic])
+        else:
+            self.set_selection([t for t in self.selection if t is not topic])
+
     def navigate(self, direction: str) -> None:
+        if self.selected is None:
+            self.select(self.root)  # XMind: with nothing selected, arrows start at the central topic
+            return
         target = neighbor(self.selected, direction, self.placements)
         if target is not None:
             self.select(target)
@@ -438,7 +485,8 @@ class MindMapView(QGraphicsView):
             self.start_edit()
 
     def delete(self) -> None:
-        self.change("Delete Topic", lambda: model.remove(self.selected))
+        label = "Delete Topics" if len(self.selection) > 1 else "Delete Topic"
+        self.change(label, lambda: model.remove_all(self.selection))
 
     def move(self, delta: int) -> None:
         self.change("Move Topic", lambda: model.move(self.selected, delta))
@@ -462,13 +510,16 @@ class MindMapView(QGraphicsView):
         self.change("Collapse All" if collapsed else "Expand All", op)
 
     def copy(self) -> None:
+        if not self.selection:
+            return
+        topics = model.top_level(self.selection)
         data = QMimeData()
-        data.setData(MIME_TYPE, json.dumps(self.selected.to_dict()).encode())
-        data.setText(model.outline_text(self.selected))
+        data.setData(MIME_TYPE, json.dumps([t.to_dict() for t in topics]).encode())
+        data.setText("\n".join(model.outline_text(t) for t in topics))
         QApplication.clipboard().setMimeData(data)
 
     def cut(self) -> None:
-        if not self.selected.is_root:
+        if any(not t.is_root for t in self.selection):
             self.copy()
             self.delete()
 
@@ -477,7 +528,8 @@ class MindMapView(QGraphicsView):
         if data is None:
             return
         if data.hasFormat(MIME_TYPE):
-            topics = [Topic.from_dict(json.loads(bytes(data.data(MIME_TYPE)).decode()))]
+            payload = json.loads(bytes(data.data(MIME_TYPE)).decode())
+            topics = [Topic.from_dict(d) for d in (payload if isinstance(payload, list) else [payload])]
         elif data.hasText():
             topics = model.parse_outline(data.text())
         else:
@@ -494,8 +546,10 @@ class MindMapView(QGraphicsView):
     # --- inline text editing
 
     def start_edit(self, initial_text: str | None = None) -> None:
-        if self.editing is not None:
+        if self.editing is not None or self.selected is None:
             return
+        if len(self.selection) > 1:
+            self.set_selection([self.selected])
         item = self.items[self.selected]
         self.editing = item
         self._edit_before = self.snapshot()
@@ -556,7 +610,11 @@ class MindMapView(QGraphicsView):
 
     def begin_drag(self, topic: Topic) -> None:
         self.commit_edit()
+        group = model.top_level([t for t in self.selection if not t.is_root])
+        topics = group if topic in group else [topic]
         ghost = TopicItem(topic, self)
+        if len(topics) > 1:
+            ghost.set_text(f"{topic.text}  +{len(topics) - 1}")
         ghost.setOpacity(0.75)
         ghost.setZValue(10)
         ghost.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
@@ -565,9 +623,10 @@ class MindMapView(QGraphicsView):
         indicator.setPen(make_pen(SELECTION, 3))
         self.scene().addItem(ghost)
         self.scene().addItem(indicator)
-        for t in topic.walk_visible():
-            self.items[t].setOpacity(DRAG_DIM)
-        self.drag = DragState(topic, ghost, indicator)
+        for t in topics:
+            for d in t.walk_visible():
+                self.items[d].setOpacity(DRAG_DIM)
+        self.drag = DragState(topic, topics, ghost, indicator)
 
     def update_drag(self, pos: QPointF) -> None:
         drag = self.drag
@@ -575,7 +634,7 @@ class MindMapView(QGraphicsView):
             return
         w, h = drag.ghost.size()
         drag.ghost.setPos(pos + QPointF(w / 2 + 14, h / 2 + 10))  # below-right of the cursor
-        drag.target = drop_target(drag.topic, pos.x(), pos.y(), self.placements)
+        drag.target = drop_target(drag.topics, pos.x(), pos.y(), self.placements)
         drag.indicator.setPath(self._indicator_path(drag.target))
         self.ensureVisible(QRectF(pos, pos).adjusted(-30, -30, 30, 30), 0, 0)
 
@@ -611,9 +670,10 @@ class MindMapView(QGraphicsView):
             return
         self.scene().removeItem(drag.ghost)
         self.scene().removeItem(drag.indicator)
-        for t in drag.topic.walk_visible():
-            if t in self.items:
-                self.items[t].setOpacity(1.0)
+        for t in drag.topics:
+            for d in t.walk_visible():
+                if d in self.items:
+                    self.items[d].setOpacity(1.0)
 
     def end_drag(self, pos: QPointF) -> None:
         drag = self.drag
@@ -622,8 +682,49 @@ class MindMapView(QGraphicsView):
         self.update_drag(pos)
         target = drag.target
         self.cancel_drag()
-        if target is not None:
-            self.change("Move Topic", lambda: model.reparent(drag.topic, target.parent, target.index))
+        if target is None:
+            return
+        selection = list(self.selection)
+        label = "Move Topics" if len(drag.topics) > 1 else "Move Topic"
+        if self.change(label, lambda: model.reparent_all(drag.topics, target.parent, target.index)):
+            if len(drag.topics) > 1:
+                self.set_selection(selection)  # topics keep their identity, so the group stays selected
+
+    # --- marquee (drag on the empty canvas) selection
+
+    def begin_marquee(self, origin: QPointF) -> None:
+        if self.drag is not None:
+            return
+        self.commit_edit()
+        band = QGraphicsRectItem()
+        band.setPen(QPen(SELECTION, 1))
+        fill = QColor(SELECTION)
+        fill.setAlpha(40)
+        band.setBrush(fill)
+        band.setZValue(20)
+        self.scene().addItem(band)
+        self.marquee = Marquee(origin, band, list(self.selection))
+        self.viewport().setCursor(Qt.CursorShape.CrossCursor)
+        self.update_marquee(origin)
+
+    def update_marquee(self, pos: QPointF) -> None:
+        m = self.marquee
+        if m is None:
+            return
+        rect = QRectF(m.origin, pos).normalized()
+        m.band.setRect(rect)
+        hits = [t for t, item in self.items.items() if rect.intersects(item.body_rect().translated(item.pos()))]
+        self.set_selection(hits)  # a box touching nothing (a plain click) clears the selection
+        self.ensureVisible(QRectF(pos, pos).adjusted(-30, -30, 30, 30), 0, 0)
+
+    def end_marquee(self, cancel: bool = False) -> None:
+        m, self.marquee = self.marquee, None
+        if m is None:
+            return
+        self.scene().removeItem(m.band)
+        if cancel:
+            self.set_selection(m.before)
+        self.viewport().unsetCursor()
 
     # --- view
 
@@ -634,7 +735,7 @@ class MindMapView(QGraphicsView):
 
     def zoom_reset(self) -> None:
         self.resetTransform()
-        self.ensureVisible(self.items[self.selected], 60, 60)
+        self.ensureVisible(self.items[self.selected or self.root], 60, 60)
 
     def fit_map(self) -> None:
         self.resetTransform()
@@ -649,9 +750,10 @@ class MindMapView(QGraphicsView):
     # --- Qt events
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
-        if self.drag is not None:
+        if self.drag is not None or self.marquee is not None:
             if event.key() == Qt.Key.Key_Escape:
                 self.cancel_drag()
+                self.end_marquee(cancel=True)
             return
         # XMind: typing on a selected topic starts editing and replaces its text.
         text = event.text()
@@ -666,6 +768,41 @@ class MindMapView(QGraphicsView):
             self.start_edit(initial_text=text)
             return
         super().keyPressEvent(event)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        # XMind: left-drag on the empty canvas draws a selection box, right-drag pans.
+        pos = event.position().toPoint()
+        if event.button() == Qt.MouseButton.LeftButton and self.drag is None:
+            hit = self.itemAt(pos)
+            if hit is None or isinstance(hit, QGraphicsPathItem):
+                self.begin_marquee(self.mapToScene(pos))
+                return
+        # On macOS a Ctrl+click arrives as a right-click with Meta: that toggles, it doesn't pan.
+        if event.button() == Qt.MouseButton.RightButton and not event.modifiers() & Qt.KeyboardModifier.MetaModifier:
+            self._pan_from = pos
+            self.viewport().setCursor(Qt.CursorShape.ClosedHandCursor)
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        pos = event.position().toPoint()
+        if self.marquee is not None:
+            self.update_marquee(self.mapToScene(pos))
+            return
+        if self._pan_from is not None:
+            delta, self._pan_from = pos - self._pan_from, pos
+            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta.x())
+            self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta.y())
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and self.marquee is not None:
+            self.end_marquee()
+            return
+        if event.button() == Qt.MouseButton.RightButton and self._pan_from is not None:
+            self._pan_from = None
+            self.viewport().unsetCursor()
+        super().mouseReleaseEvent(event)
 
     def focusNextPrevChild(self, next: bool) -> bool:
         return False  # Tab belongs to "Insert Subtopic", not focus traversal

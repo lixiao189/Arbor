@@ -148,6 +148,8 @@ class MainWindow(QMainWindow):
     def _update_status(self) -> None:
         if self.view.editing is not None:
             msg = "Editing — Enter to finish, Shift+Enter for a new line, Esc to cancel, Tab to add a subtopic"
+        elif len(self.view.selection) > 1:
+            msg = f"{len(self.view.selection)} topics selected — Del, Cut and Copy apply to all of them"
         else:
             msg = "Tab: subtopic · Enter: sibling · Ctrl+Enter: parent · Space/F2: edit · Del: delete · Arrows: move"
         self.statusBar().showMessage(msg)

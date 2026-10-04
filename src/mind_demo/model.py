@@ -173,6 +173,22 @@ def remove(topic: Topic) -> Topic | None:
     return nxt
 
 
+def top_level(topics: list[Topic]) -> list[Topic]:
+    """The given topics minus those inside another given topic's subtree."""
+    return [t for t in topics if not any(o.is_ancestor_of(t) for o in topics)]
+
+
+def remove_all(topics: list[Topic]) -> Topic | None:
+    """Delete several topics (the root is skipped); returns the topic to select next."""
+    tops = top_level([t for t in topics if not t.is_root])
+    if not tops:
+        return None
+    root, fallback = tops[0].root(), tops[0].parent
+    for t in tops:
+        nxt = remove(t)
+    return nxt if nxt.root() is root else fallback
+
+
 def move(topic: Topic, delta: int) -> Topic | None:
     parent = topic.parent
     if parent is None:
@@ -187,17 +203,25 @@ def move(topic: Topic, delta: int) -> Topic | None:
 
 def reparent(topic: Topic, parent: Topic, index: int) -> Topic | None:
     """Move ``topic`` to ``parent.children[index]`` (index as seen before the move)."""
-    if topic.parent is None or topic is parent or topic.is_ancestor_of(parent):
+    return reparent_all([topic], parent, index)
+
+
+def reparent_all(topics: list[Topic], parent: Topic, index: int) -> Topic | None:
+    """Move several topics, in document order, to ``parent.children[index]`` (index as seen
+    before the move); the root is skipped. Returns the first moved topic."""
+    tops = sorted(top_level([t for t in topics if not t.is_root]), key=Topic.path)
+    if not tops or any(t is parent or t.is_ancestor_of(parent) for t in tops):
         return None
-    if topic.parent is parent:
-        old = topic.index
-        if index > old:
-            index -= 1
-        if index == old:
-            return None
-    topic.detach()
+    before = [(t.parent, t.index) for t in tops]
+    index -= sum(1 for t in tops if t.parent is parent and t.index < index)
+    for t in tops:
+        t.detach()
+    for i, t in enumerate(tops):
+        parent.add(t, index + i)
+    if [(t.parent, t.index) for t in tops] == before:
+        return None
     parent.collapsed = False
-    return parent.add(topic, index)
+    return tops[0]
 
 
 def paste(target: Topic, subtree: Topic) -> Topic:

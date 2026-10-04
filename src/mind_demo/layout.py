@@ -5,7 +5,7 @@ Pure Python so it can be tested without Qt: topic sizes come from a ``measure`` 
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
@@ -125,11 +125,12 @@ class DropTarget:
 
 
 def drop_target(
-    dragged: Topic, x: float, y: float, placements: dict[Topic, Placement]
+    dragged: Topic | Sequence[Topic], x: float, y: float, placements: dict[Topic, Placement]
 ) -> DropTarget | None:
-    """Where ``dragged`` would land if dropped at scene point (x, y)."""
+    """Where ``dragged`` (one topic or several) would land if dropped at scene point (x, y)."""
+    group = [dragged] if isinstance(dragged, Topic) else dragged
     for t, p in placements.items():
-        if t is dragged or dragged.is_ancestor_of(t):
+        if any(t is d or d.is_ancestor_of(t) for d in group):
             continue
         if abs(x - p.x) > p.w / 2 + DROP_SLOP or abs(y - p.y) > p.h / 2 + DROP_SLOP:
             continue
