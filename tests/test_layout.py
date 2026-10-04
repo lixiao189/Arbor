@@ -1,4 +1,4 @@
-from arbor.layout import layout, neighbor
+from arbor.layout import Side, layout, neighbor
 from arbor.model import Topic
 
 
@@ -19,7 +19,7 @@ def test_balanced_sides():
     root = make(5)
     p = layout(root, measure)
     sides = [p[c].side for c in root.children]
-    assert sides == [1, 1, 1, -1, -1]
+    assert sides == [Side.RIGHT] * 3 + [Side.LEFT] * 2
     assert all(p[c].x > 0 for c in root.children[:3])
     assert all(p[c].x < 0 for c in root.children[3:])
     # grandchildren continue outward
@@ -30,7 +30,7 @@ def test_balanced_sides():
 def test_no_vertical_overlap_on_a_side():
     root = make(6)
     p = layout(root, measure)
-    for side in (1, -1):
+    for side in (Side.RIGHT, Side.LEFT):
         leaves = sorted((p[t].y for t in p if p[t].side == side and not t.children))
         assert all(b - a >= 30 for a, b in zip(leaves, leaves[1:]))
 

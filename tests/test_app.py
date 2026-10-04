@@ -7,6 +7,7 @@ from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication
 
 from arbor.app import MainWindow
+from arbor.layout import Side
 
 K = Qt.Key
 M = Qt.KeyboardModifier
@@ -203,7 +204,7 @@ def canvas_drag(w, start, end, button=Qt.MouseButton.LeftButton, release=True):
 
 
 def box_around_right_topics(v):
-    right = [t for t in v.root.children if v.placements[t].side > 0]
+    right = [t for t in v.root.children if v.placements[t].side is Side.RIGHT]
     rects = [v.items[t].sceneBoundingRect() for t in right]
     start = QPointF(max(r.right() for r in rects) + 20, min(r.top() for r in rects) - 20)
     end = QPointF(v.items[right[0]].pos().x(), max(r.bottom() for r in rects) + 5)
