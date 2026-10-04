@@ -1,10 +1,5 @@
 # Using Arbor
 
-```bash
-uv run arbor            # start with a new map
-uv run arbor notes.mind # open a file
-```
-
 ## Key bindings
 
 On macOS, `Ctrl` means `Cmd` and `Alt` means `Option`.
