@@ -7,7 +7,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QLoggingCategory, Qt
 from PyQt6.QtGui import QAction, QCloseEvent, QKeySequence
 from PyQt6.QtWidgets import (
     QApplication,
@@ -44,7 +44,9 @@ class MainWindow(QMainWindow):
         self._build_menus()
 
         self.view.editingChanged.connect(self._on_editing_changed)
-        self.view.undo_stack.cleanChanged.connect(lambda _: self._update_title())
+        # Bound methods (not lambdas) so PyQt disconnects them when the window is
+        # destroyed; the undo stack still emits while it is being torn down.
+        self.view.undo_stack.cleanChanged.connect(self._update_title)
         self.view.selectionChanged.connect(self._update_status)
 
         if path is not None:
@@ -85,11 +87,10 @@ class MainWindow(QMainWindow):
         m = bar.addMenu("&Edit")
         undo = a(m, "Undo", v.undo_stack.undo, "Ctrl+Z")
         redo = a(m, "Redo", v.undo_stack.redo, ["Ctrl+Shift+Z", "Ctrl+Y"])
-        v.undo_stack.canUndoChanged.connect(lambda ok: undo.setEnabled(ok and v.editing is None))
-        v.undo_stack.canRedoChanged.connect(lambda ok: redo.setEnabled(ok and v.editing is None))
-        undo.setEnabled(False)
-        redo.setEnabled(False)
         self._undo, self._redo = undo, redo
+        v.undo_stack.canUndoChanged.connect(self._sync_undo_actions)
+        v.undo_stack.canRedoChanged.connect(self._sync_undo_actions)
+        self._sync_undo_actions()
         m.addSeparator()
         a(m, "Cut", v.cut, "Ctrl+X")
         a(m, "Copy", v.copy, "Ctrl+C")
@@ -130,12 +131,15 @@ class MainWindow(QMainWindow):
     def _on_editing_changed(self, editing: bool) -> None:
         for action in self.map_actions:
             action.setEnabled(not editing)
-        if not editing:
-            self._undo.setEnabled(self.view.undo_stack.canUndo())
-            self._redo.setEnabled(self.view.undo_stack.canRedo())
+        self._sync_undo_actions()
         self._update_status()
 
-    def _update_title(self) -> None:
+    def _sync_undo_actions(self) -> None:
+        editing = self.view.editing is not None
+        self._undo.setEnabled(self.view.undo_stack.canUndo() and not editing)
+        self._redo.setEnabled(self.view.undo_stack.canRedo() and not editing)
+
+    def _update_title(self, *_args: object) -> None:
         name = self.path.name if self.path else "Untitled"
         self.setWindowFilePath(str(self.path) if self.path else "")
         self.setWindowModified(not self.view.undo_stack.isClean())
@@ -237,6 +241,9 @@ class MainWindow(QMainWindow):
 
 
 def main() -> None:
+    # Qt 6 on macOS logs a "Mismatch between Cocoa and Carbon" warning for every
+    # Return/Tab shortcut; it is harmless noise.
+    QLoggingCategory.setFilterRules("qt.qpa.keymapper.warning=false")
     app = QApplication(sys.argv)
     app.setApplicationName("Mind Demo")
     path = Path(sys.argv[1]) if len(sys.argv) > 1 else None

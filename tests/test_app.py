@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 from PyQt6.QtCore import Qt
 from PyQt6.QtTest import QTest
@@ -104,3 +106,23 @@ def test_copy_paste(win):
     key(win, K.Key_V, M.ControlModifier)
     assert v.selected.text == "Main Topic 1"
     assert v.selected.parent is v.root.children[1]
+
+
+def test_destroying_dirty_window_does_not_touch_deleted_window():
+    from PyQt6.QtCore import QCoreApplication, QEvent
+
+    app = QApplication.instance() or QApplication([])
+    errors = []
+    old_hook = sys.excepthook
+    sys.excepthook = lambda *exc: errors.append(exc)
+    try:
+        w = MainWindow()
+        w.view.add_child()
+        w.view.cancel_edit()
+        w.deleteLater()
+        del w
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
+        app.processEvents()
+    finally:
+        sys.excepthook = old_hook
+    assert not errors
