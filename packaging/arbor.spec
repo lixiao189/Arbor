@@ -6,7 +6,10 @@
 # Arbor only uses QtCore, QtGui and QtWidgets, but PyInstaller's PyQt6 hooks
 # still collect every Qt plugin of those modules along with the libraries the
 # plugins link. The filters below drop the ones the app never loads.
-from pathlib import PurePath
+import shutil
+import subprocess
+import sys
+from pathlib import Path, PurePath
 
 # Qt plugins (by "<category>/<name>" without lib prefix or extension) and plugin
 # categories that are not needed. The PDF image format alone drags in QtPdf and
@@ -22,6 +25,19 @@ UNUSED_PLUGINS = {
 
 # Qt libraries that only the dropped plugins depend on.
 UNUSED_QT_LIBS = {"QtPdf", "QtNetwork"}
+
+# PyQt6 binding modules the app never imports. The hooks collect the QtDBus
+# binding because QtGui links the QtDBus library, which itself must stay.
+UNUSED_BINDINGS = ["PyQt6.QtDBus"]
+
+# Strip symbols from collected binaries (PyInstaller uses `strip -S` on macOS).
+# GNU strip on Windows can corrupt MSVC-built DLLs, so skip it there.
+STRIP = sys.platform != "win32"
+
+# `strip -S` leaves the local symbols in libpython on macOS; dropping them too
+# saves about 1.4 MB. PyInstaller has no option for it, so the spec strips a
+# copy itself (PyInstaller re-signs it ad hoc afterwards).
+LIBPYTHON_STRIP_ARGS = ["-x"] if sys.platform == "darwin" else None
 
 
 def qt_lib_name(part):
@@ -45,11 +61,23 @@ def is_unused(dest):
     return any(qt_lib_name(part) in UNUSED_QT_LIBS for part in parts)
 
 
+def stripped_libpython(entry):
+    """Replace a libpython binary entry with a copy stripped by LIBPYTHON_STRIP_ARGS."""
+    dest, src, typecode = entry
+    if LIBPYTHON_STRIP_ARGS is None or not PurePath(dest).name.startswith("libpython"):
+        return entry
+    copy = Path(workpath, "stripped", PurePath(dest).name)
+    copy.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(src, copy)
+    subprocess.run(["strip", *LIBPYTHON_STRIP_ARGS, copy], check=True)
+    return dest, str(copy), typecode
+
+
 a = Analysis(
     ["launcher.py"],
-    excludes=["tkinter"],
+    excludes=["tkinter", *UNUSED_BINDINGS],
 )
-a.binaries = [entry for entry in a.binaries if not is_unused(entry[0])]
+a.binaries = [stripped_libpython(entry) for entry in a.binaries if not is_unused(entry[0])]
 a.datas = [entry for entry in a.datas if not is_unused(entry[0])]
 
 pyz = PYZ(a.pure)
@@ -60,7 +88,8 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name="Arbor",
+    strip=STRIP,
     console=False,
 )
-coll = COLLECT(exe, a.binaries, a.datas, name="Arbor")
+coll = COLLECT(exe, a.binaries, a.datas, strip=STRIP, name="Arbor")
 app = BUNDLE(coll, name="Arbor.app", bundle_identifier=None)
