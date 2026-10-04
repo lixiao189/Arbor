@@ -9,7 +9,29 @@ permissions:
   contents: write
 
 jobs:
+  # Scheduled runs skip the build when the nightly release already points at
+  # this commit; manual runs always build.
+  check:
+    runs-on: ubuntu-24.04
+    outputs:
+      changed: ${{ steps.compare.outputs.changed }}
+    steps:
+      - id: compare
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          built=$(gh api "repos/$GH_REPO/commits/nightly" -q .sha 2>/dev/null || true)
+          if [ "$GITHUB_EVENT_NAME" != schedule ] || [ "$built" != "$GITHUB_SHA" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "nightly already built from $GITHUB_SHA, skipping"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
   test:
+    needs: check
+    if: needs.check.outputs.changed == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
