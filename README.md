@@ -15,6 +15,7 @@ Arbor is in alpha. The latest [nightly build](https://github.com/lixiao189/Arbor
 - [macOS (Apple Silicon)](https://github.com/lixiao189/Arbor/releases/download/nightly/Arbor-macos-arm64.zip) – unsigned; right-click the app and choose Open the first time
 - [Windows (x86_64)](https://github.com/lixiao189/Arbor/releases/download/nightly/Arbor-windows-x86_64.zip)
 - [Linux (x86_64)](https://github.com/lixiao189/Arbor/releases/download/nightly/Arbor-linux-x86_64.tar.gz)
+- [Linux (aarch64)](https://github.com/lixiao189/Arbor/releases/download/nightly/Arbor-linux-aarch64.tar.gz)
 
 ## Quick start
 
