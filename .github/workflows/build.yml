@@ -23,6 +23,7 @@ jobs:
           path: dist/*
 
   app:
+    name: app (${{ matrix.name }})
     strategy:
       fail-fast: false
       matrix:
