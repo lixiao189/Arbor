@@ -9,20 +9,11 @@ from pathlib import Path
 
 from PyQt6.QtCore import QLoggingCategory, Qt
 from PyQt6.QtGui import QAction, QCloseEvent, QKeySequence
-from PyQt6.QtWidgets import (
-    QApplication,
-    QFileDialog,
-    QMainWindow,
-    QMessageBox,
-    QTableWidget,
-    QTableWidgetItem,
-    QVBoxLayout,
-    QDialog,
-    QHeaderView,
-)
+from PyQt6.QtWidgets import QApplication, QFileDialog, QMainWindow, QMessageBox
 
 from . import model
 from .canvas import MindMapView
+from .shortcuts import ShortcutsDialog
 
 FILE_FILTER = "Mind Map (*.mind);;All Files (*)"
 
@@ -225,21 +216,7 @@ class MainWindow(QMainWindow):
     # --- help
 
     def show_shortcuts(self) -> None:
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Keyboard Shortcuts")
-        table = QTableWidget(len(self.shortcuts), 3, dialog)
-        table.setHorizontalHeaderLabels(["Menu", "Command", "Shortcut"])
-        table.verticalHeader().setVisible(False)
-        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        for row, values in enumerate(self.shortcuts):
-            for col, value in enumerate(values):
-                table.setItem(row, col, QTableWidgetItem(value))
-        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        table.horizontalHeader().setStretchLastSection(True)
-        layout = QVBoxLayout(dialog)
-        layout.addWidget(table)
-        dialog.resize(560, 600)
-        dialog.exec()
+        ShortcutsDialog(self.shortcuts, self).exec()
 
 
 def main() -> None:

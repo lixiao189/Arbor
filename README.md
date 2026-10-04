@@ -59,5 +59,11 @@ it (on macOS `Cmd`+click; the physical `Ctrl` key works too).
 
 - `src/mind_demo/model.py`: topic tree, editing operations, JSON (`.mind`) format
 - `src/mind_demo/layout.py`: balanced left/right layout, arrow-key navigation and drop zones (no Qt dependency)
-- `src/mind_demo/canvas.py`: `QGraphicsView` rendering, inline editing, snapshot-based undo
+- `src/mind_demo/style.py`: colours and per-depth topic styles
+- `src/mind_demo/items.py`: graphics items for a topic (label/inline editor, body, fold badge)
+- `src/mind_demo/drag.py`: drag-and-drop and selection-box state and drop indicator
+- `src/mind_demo/clipboard.py`: copying topics to and pasting them from the clipboard
+- `src/mind_demo/undo.py`: snapshot-based undo command
+- `src/mind_demo/canvas.py`: `QGraphicsView` that owns the document, selection, inline editing and dragging
 - `src/mind_demo/app.py`: main window, menus and key bindings
+- `src/mind_demo/shortcuts.py`: keyboard shortcuts help dialog

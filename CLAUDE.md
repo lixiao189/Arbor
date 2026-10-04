@@ -22,8 +22,11 @@ Layers, from pure to Qt-heavy:
 
 - **`model.py`** – `Topic` tree (dataclass with `eq=False`, so equality/hashing is by identity and topics are used as dict keys everywhere). Editing operations are module-level functions that mutate the tree and **return the topic to select next, or `None` if the operation doesn't apply**. `.mind` files are JSON: `{"version": 1, "root": {...}}`.
 - **`layout.py`** – no Qt imports. Computes a balanced left/right layout (`layout()` → `dict[Topic, Placement]`, centres in scene coordinates), arrow-key navigation (`neighbor()`), and drag-drop hit testing (`drop_target()`). Topic sizes are injected via a `measure` callback, so it is unit-tested without Qt.
+- **`style.py`** – colours and the per-depth `Style` (root / main / subtopic), `branch_color()`.
+- **`items.py`** – `TopicItem` (a topic's body; forwards mouse events to the view), its `TopicText` label that doubles as the inline editor, and `FoldBadge`.
+- **`drag.py`** – `DragState` / `Marquee` dataclasses and the drop-indicator path; **`clipboard.py`** – topics ↔ `QMimeData` (own JSON format plus a text outline); **`undo.py`** – `SnapshotCommand`.
 - **`canvas.py`** – `MindMapView` (`QGraphicsView`) owns the document (`root`, `selected`, plus `selection` for multi-select via a left-drag box on the empty canvas or Ctrl+click; right-drag pans; `selected` is `selection[0]`, or `None` when nothing is selected, which is the initial state; `change()` is a no-op then), the undo stack, inline editing and dragging.
-- **`app.py`** – `MainWindow`: menus, `QAction` shortcuts, file I/O, the shortcuts help dialog.
+- **`app.py`** – `MainWindow`: menus, `QAction` shortcuts, file I/O. **`shortcuts.py`** – the shortcuts help dialog.
 
 Key mechanics that span files:
 
