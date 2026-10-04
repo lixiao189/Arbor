@@ -6,7 +6,7 @@ from PyQt6.QtGui import QMouseEvent
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication
 
-from mind_demo.app import MainWindow
+from arbor.app import MainWindow
 
 K = Qt.Key
 M = Qt.KeyboardModifier

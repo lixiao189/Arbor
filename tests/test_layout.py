@@ -1,5 +1,5 @@
-from mind_demo.layout import layout, neighbor
-from mind_demo.model import Topic
+from arbor.layout import layout, neighbor
+from arbor.model import Topic
 
 
 def measure(t):
@@ -59,7 +59,7 @@ def test_navigation():
 
 
 def test_drop_target_zones():
-    from mind_demo.layout import drop_target
+    from arbor.layout import drop_target
 
     root = make(4)
     p = layout(root, measure)

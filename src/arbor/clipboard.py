@@ -9,7 +9,7 @@ from PyQt6.QtCore import QMimeData
 from . import model
 from .model import Topic
 
-MIME_TYPE = "application/x-mind-demo-topic"
+MIME_TYPE = "application/x-arbor-topic"
 
 
 def to_mime(topics: list[Topic]) -> QMimeData:

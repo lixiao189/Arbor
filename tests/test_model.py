@@ -1,5 +1,5 @@
-from mind_demo import model
-from mind_demo.model import Topic
+from arbor import model
+from arbor.model import Topic
 
 
 def tree():

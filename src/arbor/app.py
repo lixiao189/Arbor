@@ -134,7 +134,7 @@ class MainWindow(QMainWindow):
         name = self.path.name if self.path else "Untitled"
         self.setWindowFilePath(str(self.path) if self.path else "")
         self.setWindowModified(not self.view.undo_stack.isClean())
-        self.setWindowTitle(f"{name}[*] — Mind Demo")
+        self.setWindowTitle(f"{name}[*] — Arbor")
 
     def _update_status(self) -> None:
         if self.view.editing is not None:
@@ -224,7 +224,7 @@ def main() -> None:
     # Return/Tab shortcut; it is harmless noise.
     QLoggingCategory.setFilterRules("qt.qpa.keymapper.warning=false")
     app = QApplication(sys.argv)
-    app.setApplicationName("Mind Demo")
+    app.setApplicationName("Arbor")
     path = Path(sys.argv[1]) if len(sys.argv) > 1 else None
     window = MainWindow(path)
     window.show()

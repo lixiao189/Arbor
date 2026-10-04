@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 The project uses `uv` (Python 3.13, PyQt6).
 
 ```bash
-uv run mind-demo                 # run the app (optionally pass a .mind file)
+uv run arbor                 # run the app (optionally pass a .mind file)
 uv run pytest                    # all tests
 uv run pytest tests/test_app.py::test_xmind_flow   # a single test
 ```
