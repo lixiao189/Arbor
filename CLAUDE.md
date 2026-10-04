@@ -36,6 +36,10 @@ Key mechanics that span files:
 - `MindMapView.keyPressEvent` starts editing when a printable key is typed on a selected topic (replacing its text), and `focusNextPrevChild` returns `False` so Tab reaches the "Insert Subtopic" action instead of moving focus.
 - Connect signals that outlive the window (for example the undo stack's) to **bound methods, not lambdas**. PyQt doesn't disconnect lambdas when the window is destroyed, which caused a crash on quit.
 
+## Conventions
+
+- **No magic numbers.** Don't encode states or categories as bare literals (`side == 0`, `side or 1`, `> 0` to mean "right"). Use an enum (e.g. `layout.Side`, an `IntEnum` so it still works as an x direction) or a named module-level constant. Sizes, gaps and colours go in named constants like `H_GAP` or the `Style` fields, not inline in drawing code.
+
 ## Tests
 
 - `test_model.py` and `test_layout.py` are pure-Python.

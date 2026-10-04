@@ -13,10 +13,19 @@ from .drag import DragState, Marquee, indicator_path, make_band, make_indicator
 from .items import FoldBadge, TopicItem
 from .layout import Placement, drop_target, layout, neighbor
 from .model import Topic
-from .style import CANVAS_BG, DRAG_DIM, make_pen
+from .style import CANVAS_BG, DRAG_DIM, DRAG_GHOST_OPACITY, Z, make_pen
 from .undo import SnapshotCommand
 
 MIN_ZOOM, MAX_ZOOM = 0.2, 4.0
+WHEEL_ZOOM_BASE = 1.0015  # zoom factor per unit of wheel angle delta
+SCENE_MARGIN_X, SCENE_MARGIN_Y = 2000, 1500  # pannable space around the map
+FIT_MARGIN = 40  # around the map in "Fit Map"
+SELECT_MARGIN = 60  # kept visible around the selected topic
+AUTOSCROLL_MARGIN = 30  # kept visible around the cursor while dragging
+FOLD_BADGE_GAP = 3  # between a collapsed topic and its badge
+ROOT_EDGE_WIDTH, EDGE_WIDTH = 3.0, 1.8
+ROOT_EDGE_BEND = 0.2  # root edges reach the child's height this fraction of the way across
+GHOST_OFFSET_X, GHOST_OFFSET_Y = 14, 10  # drag ghost, below-right of the cursor
 
 
 class MindMapView(QGraphicsView):
@@ -115,24 +124,24 @@ class MindMapView(QGraphicsView):
                 self._add_edge(self.items[topic.parent], item)
             if topic.collapsed and topic.children:
                 badge = FoldBadge(item)
-                side = item.side or 1
-                badge.setPos(item.pos() + QPointF(side * (item.size()[0] / 2 + FoldBadge.RADIUS + 3), 0))
+                side = item.side.outward
+                badge.setPos(item.pos() + QPointF(side * (item.size()[0] / 2 + FoldBadge.RADIUS + FOLD_BADGE_GAP), 0))
                 self.scene().addItem(badge)
         bounds = self.scene().itemsBoundingRect()
-        self.scene().setSceneRect(bounds.adjusted(-2000, -1500, 2000, 1500))
+        self.scene().setSceneRect(bounds.adjusted(-SCENE_MARGIN_X, -SCENE_MARGIN_Y, SCENE_MARGIN_X, SCENE_MARGIN_Y))
 
     def _add_edge(self, parent: TopicItem, child: TopicItem) -> None:
         start, end = parent.anchor_out(), child.anchor_in()
         path = QPainterPath(start)
         mid = (start.x() + end.x()) / 2
         if parent.topic.is_root:
-            path.cubicTo(QPointF(mid, start.y()), QPointF(start.x() + (end.x() - start.x()) * 0.2, end.y()), end)
+            path.cubicTo(QPointF(mid, start.y()), QPointF(start.x() + (end.x() - start.x()) * ROOT_EDGE_BEND, end.y()), end)
         else:
             path.cubicTo(QPointF(mid, start.y()), QPointF(mid, end.y()), end)
         edge = QGraphicsPathItem(path)
-        width = 3.0 if parent.topic.is_root else 1.8
+        width = ROOT_EDGE_WIDTH if parent.topic.is_root else EDGE_WIDTH
         edge.setPen(make_pen(child.color, width))
-        edge.setZValue(0)
+        edge.setZValue(Z.EDGE)
         self.scene().addItem(edge)
 
     def center_root(self) -> None:
@@ -143,7 +152,7 @@ class MindMapView(QGraphicsView):
     def select(self, topic: Topic) -> None:
         self.set_selection([topic])
         if self.selected is not None:
-            self.ensureVisible(self.items[self.selected], 60, 60)
+            self.ensureVisible(self.items[self.selected], SELECT_MARGIN, SELECT_MARGIN)
 
     def set_selection(self, topics: list[Topic]) -> None:
         """Select several topics (or none); the first becomes the primary selection."""
@@ -311,8 +320,8 @@ class MindMapView(QGraphicsView):
         ghost = TopicItem(topic, self)
         if len(topics) > 1:
             ghost.set_text(f"{topic.text}  +{len(topics) - 1}")
-        ghost.setOpacity(0.75)
-        ghost.setZValue(10)
+        ghost.setOpacity(DRAG_GHOST_OPACITY)
+        ghost.setZValue(Z.DRAG_GHOST)
         ghost.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         indicator = make_indicator()
         self.scene().addItem(ghost)
@@ -327,10 +336,10 @@ class MindMapView(QGraphicsView):
         if drag is None:
             return
         w, h = drag.ghost.size()
-        drag.ghost.setPos(pos + QPointF(w / 2 + 14, h / 2 + 10))  # below-right of the cursor
+        drag.ghost.setPos(pos + QPointF(w / 2 + GHOST_OFFSET_X, h / 2 + GHOST_OFFSET_Y))
         drag.target = drop_target(drag.topics, pos.x(), pos.y(), self.placements)
         drag.indicator.setPath(indicator_path(drag.target, self.items))
-        self.ensureVisible(QRectF(pos, pos).adjusted(-30, -30, 30, 30), 0, 0)
+        self.ensureVisible(QRectF(pos, pos).adjusted(-AUTOSCROLL_MARGIN, -AUTOSCROLL_MARGIN, AUTOSCROLL_MARGIN, AUTOSCROLL_MARGIN), 0, 0)
 
     def cancel_drag(self) -> None:
         drag, self.drag = self.drag, None
@@ -378,7 +387,7 @@ class MindMapView(QGraphicsView):
         m.band.setRect(rect)
         hits = [t for t, item in self.items.items() if rect.intersects(item.body_rect().translated(item.pos()))]
         self.set_selection(hits)  # a box touching nothing (a plain click) clears the selection
-        self.ensureVisible(QRectF(pos, pos).adjusted(-30, -30, 30, 30), 0, 0)
+        self.ensureVisible(QRectF(pos, pos).adjusted(-AUTOSCROLL_MARGIN, -AUTOSCROLL_MARGIN, AUTOSCROLL_MARGIN, AUTOSCROLL_MARGIN), 0, 0)
 
     def end_marquee(self, cancel: bool = False) -> None:
         m, self.marquee = self.marquee, None
@@ -398,14 +407,14 @@ class MindMapView(QGraphicsView):
 
     def zoom_reset(self) -> None:
         self.resetTransform()
-        self.ensureVisible(self.items[self.selected or self.root], 60, 60)
+        self.ensureVisible(self.items[self.selected or self.root], SELECT_MARGIN, SELECT_MARGIN)
 
     def fit_map(self) -> None:
         self.resetTransform()
         bounds = QRectF()
         for item in self.items.values():
             bounds = bounds.united(item.sceneBoundingRect())
-        self.fitInView(bounds.adjusted(-40, -40, 40, 40), Qt.AspectRatioMode.KeepAspectRatio)
+        self.fitInView(bounds.adjusted(-FIT_MARGIN, -FIT_MARGIN, FIT_MARGIN, FIT_MARGIN), Qt.AspectRatioMode.KeepAspectRatio)
         if self.transform().m11() > 1:
             self.resetTransform()
             self.centerOn(bounds.center())
@@ -472,6 +481,6 @@ class MindMapView(QGraphicsView):
 
     def wheelEvent(self, event: QWheelEvent) -> None:
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            self.zoom_by(1.0015 ** event.angleDelta().y())
+            self.zoom_by(WHEEL_ZOOM_BASE ** event.angleDelta().y())
         else:
             super().wheelEvent(event)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import IntEnum
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QPen
@@ -16,6 +17,18 @@ SUB_TEXT = QColor("#2B2B2B")
 PALETTE = [QColor(c) for c in ("#E8594A", "#F29B38", "#E9C33B", "#4DB86C", "#3D9BE0", "#8E6BD8")]
 MAX_TEXT_WIDTH = 280
 DRAG_DIM = 0.35
+DRAG_GHOST_OPACITY = 0.75
+
+
+class Z(IntEnum):
+    """Stacking order of scene items, back to front."""
+
+    EDGE = 0
+    TOPIC = 1
+    FOLD_BADGE = 2
+    DROP_INDICATOR = 9
+    DRAG_GHOST = 10
+    MARQUEE = 20
 
 
 @dataclass(frozen=True)

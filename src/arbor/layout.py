@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from enum import IntEnum
 from typing import Literal
 
 from .model import Topic
@@ -18,13 +19,26 @@ V_GAP = 14
 Measure = Callable[[Topic], tuple[float, float]]
 
 
+class Side(IntEnum):
+    """Which side of the root a topic sits on; the value is the x direction away from the root."""
+
+    LEFT = -1
+    CENTER = 0  # the root
+    RIGHT = 1
+
+    @property
+    def outward(self) -> Side:
+        """Direction to draw things beside the topic; the root uses the right."""
+        return Side.RIGHT if self is Side.CENTER else self
+
+
 @dataclass
 class Placement:
     x: float  # center
     y: float  # center
     w: float
     h: float
-    side: int  # +1 right, -1 left, 0 for the root
+    side: Side
 
 
 def split_sides(count: int) -> int:
@@ -56,7 +70,7 @@ def layout(root: Topic, measure: Measure) -> dict[Topic, Placement]:
 
     out: dict[Topic, Placement] = {}
 
-    def place_stack(parent: Topic, kids: list[Topic], side: int, gap: float) -> None:
+    def place_stack(parent: Topic, kids: list[Topic], side: Side, gap: float) -> None:
         p = out[parent]
         y = p.y - stack_height(kids) / 2
         for child in kids:
@@ -65,17 +79,17 @@ def layout(root: Topic, measure: Measure) -> dict[Topic, Placement]:
             place(child, p.x + side * (p.w / 2 + gap + cw / 2), y + sh / 2, side)
             y += sh + V_GAP
 
-    def place(t: Topic, x: float, y: float, side: int) -> None:
+    def place(t: Topic, x: float, y: float, side: Side) -> None:
         w, h = size(t)
         out[t] = Placement(x, y, w, h, side)
         place_stack(t, visible_children(t), side, H_GAP)
 
     w, h = size(root)
-    out[root] = Placement(0.0, 0.0, w, h, 0)
+    out[root] = Placement(0.0, 0.0, w, h, Side.CENTER)
     kids = visible_children(root)
     n_right = split_sides(len(kids))
-    place_stack(root, kids[:n_right], +1, ROOT_H_GAP)
-    place_stack(root, kids[n_right:], -1, ROOT_H_GAP)
+    place_stack(root, kids[:n_right], Side.RIGHT, ROOT_H_GAP)
+    place_stack(root, kids[n_right:], Side.LEFT, ROOT_H_GAP)
     return out
 
 
@@ -88,7 +102,7 @@ def neighbor(topic: Topic, direction: str, placements: dict[Topic, Placement]) -
     """
     p = placements[topic]
     if direction in ("left", "right"):
-        d = 1 if direction == "right" else -1
+        d = Side.RIGHT if direction == "right" else Side.LEFT
         if topic.parent is not None and p.side == -d:
             return topic.parent
         cands = [c for c in topic.children if c in placements and placements[c].side == d]
