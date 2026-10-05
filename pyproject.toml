@@ -25,10 +25,5 @@ dev = [
 ]
 
 [tool.ty.rules]
-# PyQt6's stubs type most getters (scene(), menuBar(), document(), ...) as Optional
-# and name event-handler parameters differently from our overrides.
-unresolved-attribute = "warn"
+# PyQt6's stubs name event-handler parameters differently from our overrides.
 invalid-method-override = "ignore"
-
-[tool.ty.terminal]
-error-on-warning = false

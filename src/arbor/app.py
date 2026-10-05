@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import QApplication, QFileDialog, QMainWindow, QMessageBox
 
 from . import model
 from .canvas import MindMapView
+from .qtutil import required
 from .shortcuts import ShortcutsDialog
 
 FILE_FILTER = "Mind Map (*.mind);;All Files (*)"
@@ -63,10 +64,10 @@ class MainWindow(QMainWindow):
 
     def _build_menus(self) -> None:
         v = self.view
-        bar = self.menuBar()
+        bar = required(self.menuBar())
         a = self._action
 
-        m = bar.addMenu("&File")
+        m = required(bar.addMenu("&File"))
         a(m, "New", self.new_file, "Ctrl+N", map_only=False)
         a(m, "Open…", self.open_file, "Ctrl+O", map_only=False)
         m.addSeparator()
@@ -75,7 +76,7 @@ class MainWindow(QMainWindow):
         m.addSeparator()
         a(m, "Quit", self.close, "Ctrl+Q", map_only=False)
 
-        m = bar.addMenu("&Edit")
+        m = required(bar.addMenu("&Edit"))
         undo = a(m, "Undo", v.undo_stack.undo, "Ctrl+Z")
         redo = a(m, "Redo", v.undo_stack.redo, ["Ctrl+Shift+Z", "Ctrl+Y"])
         self._undo, self._redo = undo, redo
@@ -90,13 +91,13 @@ class MainWindow(QMainWindow):
         m.addSeparator()
         a(m, "Edit Topic", v.start_edit, ["Space", "F2"])
 
-        m = bar.addMenu("&Insert")
+        m = required(bar.addMenu("&Insert"))
         a(m, "Subtopic", v.add_child, ["Tab", "Insert"])
         a(m, "Topic (After)", lambda: v.add_sibling(before=False), ["Return", "Enter"])
         a(m, "Topic (Before)", lambda: v.add_sibling(before=True), ["Shift+Return", "Shift+Enter"])
         a(m, "Parent Topic", v.insert_parent, ["Ctrl+Return", "Ctrl+Enter"])
 
-        m = bar.addMenu("&Topic")
+        m = required(bar.addMenu("&Topic"))
         a(m, "Collapse / Expand", v.toggle_collapse, "Ctrl+/")
         a(m, "Collapse All Subtopics", lambda: v.set_all_collapsed(True), "Ctrl+Alt+/")
         a(m, "Expand All Subtopics", lambda: v.set_all_collapsed(False), "Ctrl+Alt+Shift+/")
@@ -106,7 +107,7 @@ class MainWindow(QMainWindow):
         m.addSeparator()
         a(m, "Select Central Topic", v.select_root, "Home")
 
-        m = bar.addMenu("&View")
+        m = required(bar.addMenu("&View"))
         a(m, "Zoom In", lambda: v.zoom_by(1.25), ["Ctrl+=", "Ctrl++"], map_only=False)
         a(m, "Zoom Out", lambda: v.zoom_by(0.8), "Ctrl+-", map_only=False)
         a(m, "Actual Size", v.zoom_reset, "Ctrl+0", map_only=False)
@@ -116,7 +117,7 @@ class MainWindow(QMainWindow):
         for direction, key in (("up", "Up"), ("down", "Down"), ("left", "Left"), ("right", "Right")):
             a(None, f"Select {direction.title()}", lambda d=direction: v.navigate(d), key)
 
-        m = bar.addMenu("&Help")
+        m = required(bar.addMenu("&Help"))
         a(m, "Keyboard Shortcuts", self.show_shortcuts, "Ctrl+Shift+L", map_only=False)
 
     def _on_editing_changed(self, editing: bool) -> None:
@@ -143,7 +144,7 @@ class MainWindow(QMainWindow):
             msg = f"{len(self.view.selection)} topics selected — Del, Cut and Copy apply to all of them"
         else:
             msg = "Tab: subtopic · Enter: sibling · Ctrl+Enter: parent · Space/F2: edit · Del: delete · Arrows: move"
-        self.statusBar().showMessage(msg)
+        required(self.statusBar()).showMessage(msg)
 
     # --- files
 
