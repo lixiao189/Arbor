@@ -10,7 +10,7 @@ The project uses `uv` (Python 3.13, PyQt6).
 uv run arbor                 # run the app (optionally pass a .mind file)
 uv run pytest                    # all tests
 uv run pytest tests/test_app.py::test_xmind_flow   # a single test
-uvx ty check                 # type check (config in pyproject.toml)
+uv run ty check              # type check (config in pyproject.toml)
 ```
 
 Tests run headless: `tests/conftest.py` sets `QT_QPA_PLATFORM=offscreen`. There is no linter or formatter configured; `ty` downgrades `unresolved-attribute` to a warning and ignores `invalid-method-override` because of PyQt6's stubs.
