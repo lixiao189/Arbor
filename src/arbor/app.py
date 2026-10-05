@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from PyQt6.QtCore import QLoggingCategory, Qt
@@ -17,7 +17,7 @@ from .shortcuts import ShortcutsDialog
 
 FILE_FILTER = "Mind Map (*.mind);;All Files (*)"
 
-Keys = str | list[str]
+Keys = str | Sequence[str]
 
 
 class MainWindow(QMainWindow):
@@ -101,8 +101,8 @@ class MainWindow(QMainWindow):
         a(m, "Collapse All Subtopics", lambda: v.set_all_collapsed(True), "Ctrl+Alt+/")
         a(m, "Expand All Subtopics", lambda: v.set_all_collapsed(False), "Ctrl+Alt+Shift+/")
         m.addSeparator()
-        a(m, "Move Up", lambda: v.move(-1), "Alt+Up")
-        a(m, "Move Down", lambda: v.move(+1), "Alt+Down")
+        a(m, "Move Up", lambda: v.move_topic(-1), "Alt+Up")
+        a(m, "Move Down", lambda: v.move_topic(+1), "Alt+Down")
         m.addSeparator()
         a(m, "Select Central Topic", v.select_root, "Home")
 

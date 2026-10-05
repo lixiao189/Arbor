@@ -28,3 +28,15 @@ jobs:
 
       - name: Run tests
         run: uv run --locked pytest
+
+  typecheck:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+
+      # ty is pinned in uv.lock; the synced venv provides PyQt6's stubs.
+      - name: Run ty
+        run: uv run --locked ty check

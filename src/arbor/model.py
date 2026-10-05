@@ -184,9 +184,10 @@ def remove_all(topics: list[Topic]) -> Topic | None:
     if not tops:
         return None
     root, fallback = tops[0].root(), tops[0].parent
+    nxt = None
     for t in tops:
         nxt = remove(t)
-    return nxt if nxt.root() is root else fallback
+    return nxt if nxt is not None and nxt.root() is root else fallback
 
 
 def move(topic: Topic, delta: int) -> Topic | None:

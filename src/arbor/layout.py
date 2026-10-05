@@ -106,7 +106,7 @@ def neighbor(topic: Topic, direction: str, placements: dict[Topic, Placement]) -
         if topic.parent is not None and p.side == -d:
             return topic.parent
         cands = [c for c in topic.children if c in placements and placements[c].side == d]
-        return min(cands, key=lambda c: abs(placements[c].y - p.y), default=None)
+        return min(cands, key=lambda c: abs(placements[c].y - p.y)) if cands else None
 
     if direction not in ("up", "down"):
         raise ValueError(direction)
@@ -123,7 +123,7 @@ def neighbor(topic: Topic, direction: str, placements: dict[Topic, Placement]) -
         for q, qp in placements.items()
         if q is not topic and qp.side == p.side and q.depth == depth and (qp.y - p.y) * d > 0
     ]
-    return min(cands, key=lambda q: abs(placements[q].y - p.y), default=None)
+    return min(cands, key=lambda q: abs(placements[q].y - p.y)) if cands else None
 
 
 DROP_EDGE = 0.3  # top/bottom fraction of a topic that means "insert beside" rather than "make child"
