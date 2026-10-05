@@ -66,12 +66,16 @@ def test_drop_target_zones():
     r0, r1, l0, _ = root.children
     pr1 = p[r1]
     mid = drop_target(r0, pr1.x, pr1.y, p)
+    assert mid is not None
     assert (mid.parent, mid.index, mid.kind) == (r1, 2, "child")
     top = drop_target(r0, pr1.x, pr1.y - 12, p)
+    assert top is not None
     assert (top.parent, top.index, top.kind) == (root, 1, "before")
     bottom = drop_target(r0, pr1.x, pr1.y + 12, p)
+    assert bottom is not None
     assert (bottom.parent, bottom.index, bottom.kind) == (root, 2, "after")
     on_root = drop_target(l0, 0, 0, p)
+    assert on_root is not None
     assert (on_root.parent, on_root.kind) == (root, "child")
     # never onto itself or its own subtree, and nothing on empty canvas
     assert drop_target(r0, p[r0].x, p[r0].y, p) is None

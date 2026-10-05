@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
 
 from .layout import Side
 from .model import Topic
+from .qtutil import required
 from .style import MAX_TEXT_WIDTH, SELECTION, SUB_TEXT, Z, branch_color, make_pen, style_for
 
 if TYPE_CHECKING:
@@ -139,25 +140,26 @@ class TopicItem(QGraphicsItem):
         label = self.label = TopicText(self)
         label.setFont(self.font)
         label.setDefaultTextColor(self.text_color)
-        label.document().setDocumentMargin(0)
+        document = required(label.document())
+        document.setDocumentMargin(0)
         label.setPlainText(self.topic.text or " ")
-        label.document().contentsChanged.connect(self._on_text_changed)
-        self._fit_editor()
+        document.contentsChanged.connect(self._on_text_changed)
+        self._fit_editor(label)
         self.update()
         return label
 
     def close_editor(self) -> str:
         """Remove the editor and return its text; the caller sets the text to show."""
-        label, self.label = self.label, None
+        label, self.label = required(self.label), None
         text = label.toPlainText()
-        label.document().contentsChanged.disconnect(self._on_text_changed)
-        if label.scene() is not None:
-            label.scene().removeItem(label)
+        required(label.document()).contentsChanged.disconnect(self._on_text_changed)
+        scene = label.scene()
+        if scene is not None:
+            scene.removeItem(label)
         self.update()
         return text
 
-    def _fit_editor(self) -> None:
-        label = self.label
+    def _fit_editor(self, label: TopicText) -> None:
         label.setTextWidth(NO_WRAP)
         if label.boundingRect().width() > MAX_TEXT_WIDTH:
             label.setTextWidth(MAX_TEXT_WIDTH)
@@ -173,7 +175,7 @@ class TopicItem(QGraphicsItem):
 
     def _on_text_changed(self) -> None:
         if self.label is not None and self.label.is_editing():
-            self._fit_editor()
+            self._fit_editor(self.label)
             self.canvas.apply_layout()
 
     def size(self) -> tuple[float, float]:

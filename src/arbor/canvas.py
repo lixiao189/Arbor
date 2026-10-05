@@ -13,6 +13,7 @@ from .drag import DragState, Marquee, indicator_path, make_band, make_indicator
 from .items import FoldBadge, TopicItem
 from .layout import Placement, drop_target, layout, neighbor
 from .model import Topic
+from .qtutil import required
 from .style import CANVAS_BG, DRAG_DIM, DRAG_GHOST_OPACITY, Z, make_pen
 from .undo import SnapshotCommand
 
@@ -34,7 +35,8 @@ class MindMapView(QGraphicsView):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setScene(QGraphicsScene(self))
+        self.map_scene = QGraphicsScene(self)
+        self.setScene(self.map_scene)
         self.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.TextAntialiasing)
         self.setBackgroundBrush(QBrush(CANVAS_BG))
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
@@ -97,7 +99,7 @@ class MindMapView(QGraphicsView):
 
     def rebuild(self) -> None:
         self.drag = self.marquee = None
-        scene = self.scene()
+        scene = self.map_scene
         scene.clear()
         self.topic_items = {}
         for topic in self.root.walk_visible():
@@ -116,9 +118,9 @@ class MindMapView(QGraphicsView):
             item = self.topic_items[topic]
             item.side = p.side
             item.setPos(p.x, p.y)
-        for child in list(self.scene().items()):
+        for child in list(self.map_scene.items()):
             if isinstance(child, (QGraphicsPathItem, FoldBadge)):
-                self.scene().removeItem(child)
+                self.map_scene.removeItem(child)
         for topic, item in self.topic_items.items():
             if topic.parent is not None:
                 self._add_edge(self.topic_items[topic.parent], item)
@@ -126,9 +128,9 @@ class MindMapView(QGraphicsView):
                 badge = FoldBadge(item)
                 side = item.side.outward
                 badge.setPos(item.pos() + QPointF(side * (item.size()[0] / 2 + FoldBadge.RADIUS + FOLD_BADGE_GAP), 0))
-                self.scene().addItem(badge)
-        bounds = self.scene().itemsBoundingRect()
-        self.scene().setSceneRect(bounds.adjusted(-SCENE_MARGIN_X, -SCENE_MARGIN_Y, SCENE_MARGIN_X, SCENE_MARGIN_Y))
+                self.map_scene.addItem(badge)
+        bounds = self.map_scene.itemsBoundingRect()
+        self.map_scene.setSceneRect(bounds.adjusted(-SCENE_MARGIN_X, -SCENE_MARGIN_Y, SCENE_MARGIN_X, SCENE_MARGIN_Y))
 
     def _add_edge(self, parent: TopicItem, child: TopicItem) -> None:
         start, end = parent.anchor_out(), child.anchor_in()
@@ -142,7 +144,7 @@ class MindMapView(QGraphicsView):
         width = ROOT_EDGE_WIDTH if parent.topic.is_root else EDGE_WIDTH
         edge.setPen(make_pen(child.color, width))
         edge.setZValue(Z.EDGE)
-        self.scene().addItem(edge)
+        self.map_scene.addItem(edge)
 
     def center_root(self) -> None:
         self.centerOn(self.topic_items[self.root])
@@ -228,7 +230,7 @@ class MindMapView(QGraphicsView):
 
     def copy(self) -> None:
         if self.selection:
-            QApplication.clipboard().setMimeData(clipboard.to_mime(model.top_level(self.selection)))
+            required(QApplication.clipboard()).setMimeData(clipboard.to_mime(model.top_level(self.selection)))
 
     def cut(self) -> None:
         if any(not t.is_root for t in self.selection):
@@ -236,7 +238,7 @@ class MindMapView(QGraphicsView):
             self.delete()
 
     def paste(self) -> None:
-        topics = clipboard.from_mime(QApplication.clipboard().mimeData())
+        topics = clipboard.from_mime(required(QApplication.clipboard()).mimeData())
         if not topics:
             return
 
@@ -279,7 +281,7 @@ class MindMapView(QGraphicsView):
         item, self.editing = self.editing, None
         if item is None:
             return None
-        label = item.label
+        label = required(item.label)
         for sig in (label.committed, label.cancelled, label.tab_pressed):
             sig.disconnect()
         label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
@@ -325,8 +327,8 @@ class MindMapView(QGraphicsView):
         ghost.setZValue(Z.DRAG_GHOST)
         ghost.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         indicator = make_indicator()
-        self.scene().addItem(ghost)
-        self.scene().addItem(indicator)
+        self.map_scene.addItem(ghost)
+        self.map_scene.addItem(indicator)
         for t in topics:
             for d in t.walk_visible():
                 self.topic_items[d].setOpacity(DRAG_DIM)
@@ -346,8 +348,8 @@ class MindMapView(QGraphicsView):
         drag, self.drag = self.drag, None
         if drag is None:
             return
-        self.scene().removeItem(drag.ghost)
-        self.scene().removeItem(drag.indicator)
+        self.map_scene.removeItem(drag.ghost)
+        self.map_scene.removeItem(drag.indicator)
         for t in drag.topics:
             for d in t.walk_visible():
                 if d in self.topic_items:
@@ -375,9 +377,9 @@ class MindMapView(QGraphicsView):
             return
         self.commit_edit()
         band = make_band()
-        self.scene().addItem(band)
+        self.map_scene.addItem(band)
         self.marquee = Marquee(origin, band, list(self.selection))
-        self.viewport().setCursor(Qt.CursorShape.CrossCursor)
+        required(self.viewport()).setCursor(Qt.CursorShape.CrossCursor)
         self.update_marquee(origin)
 
     def update_marquee(self, pos: QPointF) -> None:
@@ -394,10 +396,10 @@ class MindMapView(QGraphicsView):
         m, self.marquee = self.marquee, None
         if m is None:
             return
-        self.scene().removeItem(m.band)
+        self.map_scene.removeItem(m.band)
         if cancel:
             self.set_selection(m.before)
-        self.viewport().unsetCursor()
+        required(self.viewport()).unsetCursor()
 
     # --- view
 
@@ -453,7 +455,7 @@ class MindMapView(QGraphicsView):
         # On macOS a Ctrl+click arrives as a right-click with Meta: that toggles, it doesn't pan.
         if event.button() == Qt.MouseButton.RightButton and not event.modifiers() & Qt.KeyboardModifier.MetaModifier:
             self._pan_from = pos
-            self.viewport().setCursor(Qt.CursorShape.ClosedHandCursor)
+            required(self.viewport()).setCursor(Qt.CursorShape.ClosedHandCursor)
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
@@ -463,8 +465,9 @@ class MindMapView(QGraphicsView):
             return
         if self._pan_from is not None:
             delta, self._pan_from = pos - self._pan_from, pos
-            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta.x())
-            self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta.y())
+            for bar, d in ((self.horizontalScrollBar(), delta.x()), (self.verticalScrollBar(), delta.y())):
+                bar = required(bar)
+                bar.setValue(bar.value() - d)
             return
         super().mouseMoveEvent(event)
 
@@ -474,7 +477,7 @@ class MindMapView(QGraphicsView):
             return
         if event.button() == Qt.MouseButton.RightButton and self._pan_from is not None:
             self._pan_from = None
-            self.viewport().unsetCursor()
+            required(self.viewport()).unsetCursor()
         super().mouseReleaseEvent(event)
 
     def focusNextPrevChild(self, next: bool) -> bool:
