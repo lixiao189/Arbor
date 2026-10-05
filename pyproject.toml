@@ -22,3 +22,9 @@ build-backend = "uv_build"
 dev = [
     "pytest>=9.1.1",
 ]
+
+[tool.ty.rules]
+# PyQt6's stubs type most getters (scene(), menuBar(), document(), ...) as Optional
+# and name event-handler parameters differently from our overrides.
+unresolved-attribute = "warn"
+invalid-method-override = "ignore"

@@ -28,12 +28,12 @@ def win():
 
 
 def key(w, k, mods=M.NoModifier):
-    QTest.keyClick(w.view, k, mods)
+    QTest.keyClick(w.view, k, mods)  # ty: ignore[no-matching-overload]
     QApplication.processEvents()
 
 
 def type_text(w, s):
-    QTest.keyClicks(w.view, s)
+    QTest.keyClicks(w.view, s)  # ty: ignore[missing-argument]
     QApplication.processEvents()
 
 
@@ -75,7 +75,7 @@ def test_typing_replaces_text_and_undo(win):
     v = win.view
     key(win, K.Key_Home)
     key(win, K.Key_Right)
-    QTest.keyClicks(v, "X")
+    QTest.keyClicks(v, "X")  # ty: ignore[missing-argument, invalid-argument-type]
     QApplication.processEvents()
     assert v.editing is not None
     type_text(win, "yz")
@@ -149,7 +149,7 @@ def drag(w, src, dst, release=True):
         QApplication.sendEvent(vp, ev)
         QApplication.processEvents()
 
-    start = v.items[src].pos()
+    start = v.topic_items[src].pos()
     L = Qt.MouseButton.LeftButton
     send(QMouseEvent.Type.MouseButtonPress, start, L)
     for t in (0.1, 0.5, 1.0):
@@ -162,7 +162,7 @@ def drag(w, src, dst, release=True):
 def test_drag_topic_onto_another_makes_it_a_child(win):
     v = win.view
     m1, m2 = v.root.children[:2]
-    drag(win, m1, v.items[m2].pos())
+    drag(win, m1, v.topic_items[m2].pos())
     assert m1.parent is m2 and v.drag is None and v.selected is m1
     assert v.root.children[0] is m2
     key(win, K.Key_Z, M.ControlModifier)
@@ -172,13 +172,13 @@ def test_drag_topic_onto_another_makes_it_a_child(win):
 def test_drag_to_edge_reorders_and_esc_cancels(win):
     v = win.view
     m1, m2 = v.root.children[:2]
-    item = v.items[m2]
+    item = v.topic_items[m2]
     below = item.pos() + QPointF(0, item.size()[1] / 2 - 2)
     drag(win, m1, below)
     assert [c.text for c in v.root.children][:2] == ["Main Topic 2", "Main Topic 1"]
 
     m3 = v.root.children[2]
-    drag(win, m3, v.items[v.root.children[0]].pos(), release=False)
+    drag(win, m3, v.topic_items[v.root.children[0]].pos(), release=False)
     assert v.drag is not None and v.drag.target is not None
     key(win, K.Key_Escape)
     assert v.drag is None and m3.parent is v.root
@@ -205,9 +205,9 @@ def canvas_drag(w, start, end, button=Qt.MouseButton.LeftButton, release=True):
 
 def box_around_right_topics(v):
     right = [t for t in v.root.children if v.placements[t].side is Side.RIGHT]
-    rects = [v.items[t].sceneBoundingRect() for t in right]
+    rects = [v.topic_items[t].sceneBoundingRect() for t in right]
     start = QPointF(max(r.right() for r in rects) + 20, min(r.top() for r in rects) - 20)
-    end = QPointF(v.items[right[0]].pos().x(), max(r.bottom() for r in rects) + 5)
+    end = QPointF(v.topic_items[right[0]].pos().x(), max(r.bottom() for r in rects) + 5)
     return right, start, end
 
 
@@ -270,7 +270,7 @@ def test_drag_moves_all_selected_topics(win):
     v = win.view
     m1, m2, m3, m4 = v.root.children
     v.set_selection([m1, m3])
-    drag(win, m3, v.items[m4].pos())
+    drag(win, m3, v.topic_items[m4].pos())
     assert m1.parent is m4 and m3.parent is m4 and m4.children[-2:] == [m1, m3]
     assert v.selection == [m1, m3] and v.drag is None
     key(win, K.Key_Z, M.ControlModifier)
@@ -281,14 +281,14 @@ def test_click_in_group_without_dragging_selects_one(win):
     v = win.view
     m1, m2 = v.root.children[:2]
     v.set_selection([m1, m2])
-    drag(win, m2, v.items[m2].pos())  # press and release in place
+    drag(win, m2, v.topic_items[m2].pos())  # press and release in place
     assert v.selection == [m2] and m1.parent is v.root
 
 
 def ctrl_click(w, topic, mods=M.ControlModifier, button=Qt.MouseButton.LeftButton):
     v = w.view
-    local = v.mapFromScene(v.items[topic].pos())
-    QTest.mouseClick(v.viewport(), button, mods, local)
+    local = v.mapFromScene(v.topic_items[topic].pos())
+    QTest.mouseClick(v.viewport(), button, mods, local)  # ty: ignore[no-matching-overload]
     QApplication.processEvents()
 
 

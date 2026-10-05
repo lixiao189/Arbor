@@ -10,9 +10,10 @@ The project uses `uv` (Python 3.13, PyQt6).
 uv run arbor                 # run the app (optionally pass a .mind file)
 uv run pytest                    # all tests
 uv run pytest tests/test_app.py::test_xmind_flow   # a single test
+uvx ty check                 # type check (config in pyproject.toml)
 ```
 
-Tests run headless: `tests/conftest.py` sets `QT_QPA_PLATFORM=offscreen`. There is no linter or formatter configured.
+Tests run headless: `tests/conftest.py` sets `QT_QPA_PLATFORM=offscreen`. There is no linter or formatter configured; `ty` downgrades `unresolved-attribute` to a warning and ignores `invalid-method-override` because of PyQt6's stubs.
 
 ## Architecture
 
@@ -30,7 +31,7 @@ Layers, from pure to Qt-heavy:
 
 Key mechanics that span files:
 
-- **Undo is snapshot-based.** Every edit goes through `MindMapView.change(label, op)`, where `op` is typically a `model` function. It snapshots `(root.to_dict(), selected.path())` before and after and pushes a `SnapshotCommand`. Undo/redo **rebuilds the whole tree from the dict**, so `Topic` object identities do not survive undo; never hold onto `Topic` references across an undoable change. Text edits are pushed separately by `commit_edit()`.
+- **Undo is snapshot-based.** Every edit goes through `MindMapView.change(label, op)`, where `op` receives the (non-`None`) selected topic and is typically a `model` function. It snapshots `(root.to_dict(), selected.path())` before and after and pushes a `SnapshotCommand`. Undo/redo **rebuilds the whole tree from the dict**, so `Topic` object identities do not survive undo; never hold onto `Topic` references across an undoable change. Text edits are pushed separately by `commit_edit()`.
 - **Rendering is rebuild-everything.** `rebuild()` clears the scene and recreates a `TopicItem` for each visible topic, then calls `apply_layout()`. There is no incremental update.
 - **Key bindings are window-level `QAction`s** registered via `MainWindow._action()`. Actions created with `map_only=True` (the default) are disabled while a topic is being edited (`editingChanged` signal), because keys like Enter, Tab, arrows and Backspace belong to the text editor then. `_action()` also records each shortcut for the help dialog (`Ctrl+Shift+L`).
 - `MindMapView.keyPressEvent` starts editing when a printable key is typed on a selected topic (replacing its text), and `focusNextPrevChild` returns `False` so Tab reaches the "Insert Subtopic" action instead of moving focus.

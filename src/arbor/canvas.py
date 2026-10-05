@@ -47,7 +47,7 @@ class MindMapView(QGraphicsView):
         self.root: Topic = model.new_document()
         self.selected: Topic | None = None  # primary selection: keyboard commands act on it
         self.selection: list[Topic] = []  # all selected topics, primary first; may be empty
-        self.items: dict[Topic, TopicItem] = {}
+        self.topic_items: dict[Topic, TopicItem] = {}
         self.placements: dict[Topic, Placement] = {}
         self.editing: TopicItem | None = None
         self.drag: DragState | None = None
@@ -79,13 +79,13 @@ class MindMapView(QGraphicsView):
             self.selected = self.root
         self.rebuild()
 
-    def change(self, label: str, op: Callable[[], Topic | None]) -> bool:
-        """Run a model operation as one undoable step; ``op`` returns the new selection."""
+    def change(self, label: str, op: Callable[[Topic], Topic | None]) -> bool:
+        """Run a model operation on the selected topic as one undoable step; ``op`` returns the new selection."""
         self.commit_edit()
         if self.selected is None:
             return False  # every command acts on the selection
         before = self.snapshot()
-        result = op()
+        result = op(self.selected)
         if result is None:
             return False
         self.selected = result
@@ -99,11 +99,11 @@ class MindMapView(QGraphicsView):
         self.drag = self.marquee = None
         scene = self.scene()
         scene.clear()
-        self.items = {}
+        self.topic_items = {}
         for topic in self.root.walk_visible():
             item = TopicItem(topic, self)
             scene.addItem(item)
-            self.items[topic] = item
+            self.topic_items[topic] = item
         self.apply_layout()
         if self.selected is not None:
             self.select(self.selected)
@@ -111,17 +111,17 @@ class MindMapView(QGraphicsView):
             self.set_selection([])
 
     def apply_layout(self) -> None:
-        self.placements = layout(self.root, lambda t: self.items[t].size())
+        self.placements = layout(self.root, lambda t: self.topic_items[t].size())
         for topic, p in self.placements.items():
-            item = self.items[topic]
+            item = self.topic_items[topic]
             item.side = p.side
             item.setPos(p.x, p.y)
         for child in list(self.scene().items()):
             if isinstance(child, (QGraphicsPathItem, FoldBadge)):
                 self.scene().removeItem(child)
-        for topic, item in self.items.items():
+        for topic, item in self.topic_items.items():
             if topic.parent is not None:
-                self._add_edge(self.items[topic.parent], item)
+                self._add_edge(self.topic_items[topic.parent], item)
             if topic.collapsed and topic.children:
                 badge = FoldBadge(item)
                 side = item.side.outward
@@ -145,26 +145,26 @@ class MindMapView(QGraphicsView):
         self.scene().addItem(edge)
 
     def center_root(self) -> None:
-        self.centerOn(self.items[self.root])
+        self.centerOn(self.topic_items[self.root])
 
     # --- selection & navigation
 
     def select(self, topic: Topic) -> None:
         self.set_selection([topic])
         if self.selected is not None:
-            self.ensureVisible(self.items[self.selected], SELECT_MARGIN, SELECT_MARGIN)
+            self.ensureVisible(self.topic_items[self.selected], SELECT_MARGIN, SELECT_MARGIN)
 
     def set_selection(self, topics: list[Topic]) -> None:
         """Select several topics (or none); the first becomes the primary selection."""
-        topics = [t for t in topics if t in self.items]
+        topics = [t for t in topics if t in self.topic_items]
         for t in self.selection:
-            if t in self.items:
-                self.items[t].selected = False
-                self.items[t].update()
+            if t in self.topic_items:
+                self.topic_items[t].selected = False
+                self.topic_items[t].update()
         self.selection, self.selected = topics, topics[0] if topics else None
         for t in topics:
-            self.items[t].selected = True
-            self.items[t].update()
+            self.topic_items[t].selected = True
+            self.topic_items[t].update()
         self.selectionChanged.emit()
 
     def toggle_selected(self, topic: Topic) -> None:
@@ -190,39 +190,39 @@ class MindMapView(QGraphicsView):
     # --- editing operations (XMind commands)
 
     def add_child(self) -> None:
-        if self.change("Insert Subtopic", lambda: model.add_child(self.selected)):
+        if self.change("Insert Subtopic", model.add_child):
             self.start_edit()
 
     def add_sibling(self, before: bool = False) -> None:
-        if self.change("Insert Topic", lambda: model.add_sibling(self.selected, before)):
+        if self.change("Insert Topic", lambda t: model.add_sibling(t, before)):
             self.start_edit()
 
     def insert_parent(self) -> None:
-        if self.change("Insert Parent Topic", lambda: model.insert_parent(self.selected)):
+        if self.change("Insert Parent Topic", model.insert_parent):
             self.start_edit()
 
     def delete(self) -> None:
         label = "Delete Topics" if len(self.selection) > 1 else "Delete Topic"
-        self.change(label, lambda: model.remove_all(self.selection))
+        self.change(label, lambda _: model.remove_all(self.selection))
 
-    def move(self, delta: int) -> None:
-        self.change("Move Topic", lambda: model.move(self.selected, delta))
+    def move_topic(self, delta: int) -> None:
+        self.change("Move Topic", lambda t: model.move(t, delta))
 
     def toggle_collapse(self) -> None:
-        def op() -> Topic | None:
-            if not self.selected.children:
+        def op(topic: Topic) -> Topic | None:
+            if not topic.children:
                 return None
-            self.selected.collapsed = not self.selected.collapsed
-            return self.selected
+            topic.collapsed = not topic.collapsed
+            return topic
 
         self.change("Collapse/Expand", op)
 
     def set_all_collapsed(self, collapsed: bool) -> None:
-        def op() -> Topic | None:
-            for t in self.selected.walk():
-                if t is not self.selected or not collapsed:
+        def op(topic: Topic) -> Topic | None:
+            for t in topic.walk():
+                if t is not topic or not collapsed:
                     t.collapsed = collapsed and bool(t.children)
-            return self.selected
+            return topic
 
         self.change("Collapse All" if collapsed else "Expand All", op)
 
@@ -240,10 +240,10 @@ class MindMapView(QGraphicsView):
         if not topics:
             return
 
-        def op() -> Topic | None:
+        def op(target: Topic) -> Topic | None:
             last = None
             for t in topics:
-                last = model.paste(self.selected, t)
+                last = model.paste(target, t)
             return last
 
         self.change("Paste", op)
@@ -255,14 +255,14 @@ class MindMapView(QGraphicsView):
             return
         if len(self.selection) > 1:
             self.set_selection([self.selected])
-        item = self.items[self.selected]
+        item = self.topic_items[self.selected]
         self.editing = item
         self._edit_before = self.snapshot()
         label = item.open_editor()
         label.setTextInteractionFlags(Qt.TextInteractionFlag.TextEditorInteraction)
-        label.committed.connect(self.commit_edit, Qt.ConnectionType.QueuedConnection)
-        label.cancelled.connect(self.cancel_edit, Qt.ConnectionType.QueuedConnection)
-        label.tab_pressed.connect(self._commit_and_add_child, Qt.ConnectionType.QueuedConnection)
+        label.committed.connect(self.commit_edit, Qt.ConnectionType.QueuedConnection)  # ty: ignore[too-many-positional-arguments]  # PyQt stubs omit the connection type
+        label.cancelled.connect(self.cancel_edit, Qt.ConnectionType.QueuedConnection)  # ty: ignore[too-many-positional-arguments]  # PyQt stubs omit the connection type
+        label.tab_pressed.connect(self._commit_and_add_child, Qt.ConnectionType.QueuedConnection)  # ty: ignore[too-many-positional-arguments]  # PyQt stubs omit the connection type
         label.setFocus(Qt.FocusReason.OtherFocusReason)
         cursor = label.textCursor()
         if initial_text is not None:
@@ -296,7 +296,7 @@ class MindMapView(QGraphicsView):
         item, text = ended
         text = text.strip()
         topic = item.topic
-        if text and text != topic.text:
+        if text and text != topic.text and self._edit_before is not None:
             topic.text = text
             self.undo_stack.push(SnapshotCommand(self, "Edit Topic", self._edit_before, self.snapshot()))
         self.rebuild()
@@ -329,7 +329,7 @@ class MindMapView(QGraphicsView):
         self.scene().addItem(indicator)
         for t in topics:
             for d in t.walk_visible():
-                self.items[d].setOpacity(DRAG_DIM)
+                self.topic_items[d].setOpacity(DRAG_DIM)
         self.drag = DragState(topic, topics, ghost, indicator)
 
     def update_drag(self, pos: QPointF) -> None:
@@ -339,7 +339,7 @@ class MindMapView(QGraphicsView):
         w, h = drag.ghost.size()
         drag.ghost.setPos(pos + QPointF(w / 2 + GHOST_OFFSET_X, h / 2 + GHOST_OFFSET_Y))
         drag.target = drop_target(drag.topics, pos.x(), pos.y(), self.placements)
-        drag.indicator.setPath(indicator_path(drag.target, self.items))
+        drag.indicator.setPath(indicator_path(drag.target, self.topic_items))
         self.ensureVisible(QRectF(pos, pos).adjusted(-AUTOSCROLL_MARGIN, -AUTOSCROLL_MARGIN, AUTOSCROLL_MARGIN, AUTOSCROLL_MARGIN), 0, 0)
 
     def cancel_drag(self) -> None:
@@ -350,8 +350,8 @@ class MindMapView(QGraphicsView):
         self.scene().removeItem(drag.indicator)
         for t in drag.topics:
             for d in t.walk_visible():
-                if d in self.items:
-                    self.items[d].setOpacity(1.0)
+                if d in self.topic_items:
+                    self.topic_items[d].setOpacity(1.0)
 
     def end_drag(self, pos: QPointF) -> None:
         drag = self.drag
@@ -364,7 +364,7 @@ class MindMapView(QGraphicsView):
             return
         selection = list(self.selection)
         label = "Move Topics" if len(drag.topics) > 1 else "Move Topic"
-        if self.change(label, lambda: model.reparent_all(drag.topics, target.parent, target.index)):
+        if self.change(label, lambda _: model.reparent_all(drag.topics, target.parent, target.index)):
             if len(drag.topics) > 1:
                 self.set_selection(selection)  # topics keep their identity, so the group stays selected
 
@@ -386,7 +386,7 @@ class MindMapView(QGraphicsView):
             return
         rect = QRectF(m.origin, pos).normalized()
         m.band.setRect(rect)
-        hits = [t for t, item in self.items.items() if rect.intersects(item.body_rect().translated(item.pos()))]
+        hits = [t for t, item in self.topic_items.items() if rect.intersects(item.body_rect().translated(item.pos()))]
         self.set_selection(hits)  # a box touching nothing (a plain click) clears the selection
         self.ensureVisible(QRectF(pos, pos).adjusted(-AUTOSCROLL_MARGIN, -AUTOSCROLL_MARGIN, AUTOSCROLL_MARGIN, AUTOSCROLL_MARGIN), 0, 0)
 
@@ -408,12 +408,12 @@ class MindMapView(QGraphicsView):
 
     def zoom_reset(self) -> None:
         self.resetTransform()
-        self.ensureVisible(self.items[self.selected or self.root], SELECT_MARGIN, SELECT_MARGIN)
+        self.ensureVisible(self.topic_items[self.selected or self.root], SELECT_MARGIN, SELECT_MARGIN)
 
     def fit_map(self) -> None:
         self.resetTransform()
         bounds = QRectF()
-        for item in self.items.values():
+        for item in self.topic_items.values():
             bounds = bounds.united(item.sceneBoundingRect())
         self.fitInView(bounds.adjusted(-FIT_MARGIN, -FIT_MARGIN, FIT_MARGIN, FIT_MARGIN), Qt.AspectRatioMode.KeepAspectRatio)
         if self.transform().m11() > 1:
