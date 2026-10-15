@@ -25,8 +25,11 @@ def from_mime(data: QMimeData | None) -> list[Topic]:
     if data is None:
         return []
     if data.hasFormat(MIME_TYPE):
-        payload = json.loads(bytes(data.data(MIME_TYPE)).decode())  # ty: ignore[invalid-argument-type]  # QByteArray supports the buffer protocol
-        return [Topic.from_dict(d) for d in (payload if isinstance(payload, list) else [payload])]
+        payload = json.loads(data.data(MIME_TYPE).data().decode())
+        return [
+            Topic.from_dict(d)
+            for d in (payload if isinstance(payload, list) else [payload])
+        ]
     if data.hasText():
         return model.parse_outline(data.text())
     return []

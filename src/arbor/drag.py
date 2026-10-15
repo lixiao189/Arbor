@@ -60,7 +60,9 @@ def make_band() -> QGraphicsRectItem:
     return band
 
 
-def indicator_path(target: DropTarget | None, items: dict[Topic, TopicItem]) -> QPainterPath:
+def indicator_path(
+    target: DropTarget | None, items: dict[Topic, TopicItem]
+) -> QPainterPath:
     """Outline showing where a drop onto ``target`` would put the dragged topics."""
     path = QPainterPath()
     if target is None:
@@ -71,7 +73,9 @@ def indicator_path(target: DropTarget | None, items: dict[Topic, TopicItem]) -> 
         # Outline the new parent; if it has no visible children yet, also sketch
         # a placeholder where the topic will go.
         pad = INDICATOR_PAD
-        path.addRoundedRect(rect.adjusted(-pad, -pad, pad, pad), INDICATOR_RADIUS, INDICATOR_RADIUS)
+        path.addRoundedRect(
+            rect.adjusted(-pad, -pad, pad, pad), INDICATOR_RADIUS, INDICATOR_RADIUS
+        )
         if target.anchor.children and not target.anchor.collapsed:
             return path
         side = item.side.outward
@@ -79,11 +83,21 @@ def indicator_path(target: DropTarget | None, items: dict[Topic, TopicItem]) -> 
         stub = QRectF(0, 0, STUB_W, STUB_H)
         stub.moveCenter(QPointF(x + side * STUB_OFFSET, rect.center().y()))
         path.moveTo(x + side * STUB_LINE_GAP, rect.center().y())
-        path.lineTo(stub.left() if side is Side.RIGHT else stub.right(), stub.center().y())
+        path.lineTo(
+            stub.left() if side is Side.RIGHT else stub.right(), stub.center().y()
+        )
         path.addRoundedRect(stub, STUB_RADIUS, STUB_RADIUS)
     else:
-        y = rect.top() - INSERT_LINE_GAP if target.kind == "before" else rect.bottom() + INSERT_LINE_GAP
-        path.addEllipse(QPointF(rect.left() - INSERT_DOT_GAP, y), INSERT_DOT_RADIUS, INSERT_DOT_RADIUS)
+        y = (
+            rect.top() - INSERT_LINE_GAP
+            if target.kind == "before"
+            else rect.bottom() + INSERT_LINE_GAP
+        )
+        path.addEllipse(
+            QPointF(rect.left() - INSERT_DOT_GAP, y),
+            INSERT_DOT_RADIUS,
+            INSERT_DOT_RADIUS,
+        )
         path.moveTo(rect.left(), y)
         path.lineTo(rect.right(), y)
     return path

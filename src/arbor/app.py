@@ -32,7 +32,9 @@ class MainWindow(QMainWindow):
         # Actions that must not fire while a topic's text is being edited (the
         # keys belong to the text editor then: Enter, Tab, arrows, Backspace, ...).
         self.map_actions: list[QAction] = []
-        self.shortcuts: list[tuple[str, str, str]] = []  # (menu, label, keys) for the help dialog
+        self.shortcuts: list[
+            tuple[str, str, str]
+        ] = []  # (menu, label, keys) for the help dialog
         self._build_menus()
 
         self.view.editingChanged.connect(self._on_editing_changed)
@@ -48,14 +50,26 @@ class MainWindow(QMainWindow):
 
     # --- actions
 
-    def _action(self, menu, label: str, slot: Callable[[], object], keys: Keys = (), map_only: bool = True) -> QAction:
+    def _action(
+        self,
+        menu,
+        label: str,
+        slot: Callable[[], object],
+        keys: Keys = (),
+        map_only: bool = True,
+    ) -> QAction:
         action = QAction(label, self)
         seqs = [keys] if isinstance(keys, str) else list(keys)
         if seqs:
             action.setShortcuts([QKeySequence(k) for k in seqs])
             action.setShortcutContext(Qt.ShortcutContext.WindowShortcut)
-            native = ", ".join(QKeySequence(k).toString(QKeySequence.SequenceFormat.NativeText) for k in seqs)
-            self.shortcuts.append((menu.title().replace("&", "") if menu else "Navigate", label, native))
+            native = ", ".join(
+                QKeySequence(k).toString(QKeySequence.SequenceFormat.NativeText)
+                for k in seqs
+            )
+            self.shortcuts.append(
+                (menu.title().replace("&", "") if menu else "Navigate", label, native)
+            )
         action.triggered.connect(lambda _checked=False: slot())
         (menu or self).addAction(action)
         if map_only:
@@ -94,13 +108,23 @@ class MainWindow(QMainWindow):
         m = required(bar.addMenu("&Insert"))
         a(m, "Subtopic", v.add_child, ["Tab", "Insert"])
         a(m, "Topic (After)", lambda: v.add_sibling(before=False), ["Return", "Enter"])
-        a(m, "Topic (Before)", lambda: v.add_sibling(before=True), ["Shift+Return", "Shift+Enter"])
+        a(
+            m,
+            "Topic (Before)",
+            lambda: v.add_sibling(before=True),
+            ["Shift+Return", "Shift+Enter"],
+        )
         a(m, "Parent Topic", v.insert_parent, ["Ctrl+Return", "Ctrl+Enter"])
 
         m = required(bar.addMenu("&Topic"))
         a(m, "Collapse / Expand", v.toggle_collapse, "Ctrl+/")
         a(m, "Collapse All Subtopics", lambda: v.set_all_collapsed(True), "Ctrl+Alt+/")
-        a(m, "Expand All Subtopics", lambda: v.set_all_collapsed(False), "Ctrl+Alt+Shift+/")
+        a(
+            m,
+            "Expand All Subtopics",
+            lambda: v.set_all_collapsed(False),
+            "Ctrl+Alt+Shift+/",
+        )
         m.addSeparator()
         a(m, "Move Up", lambda: v.move_topic(-1), "Alt+Up")
         a(m, "Move Down", lambda: v.move_topic(+1), "Alt+Down")
@@ -114,8 +138,18 @@ class MainWindow(QMainWindow):
         a(m, "Fit Map", v.fit_map, "Ctrl+Shift+0", map_only=False)
 
         # Arrow-key navigation: window-level actions, not shown in a menu.
-        for direction, key in (("up", "Up"), ("down", "Down"), ("left", "Left"), ("right", "Right")):
-            a(None, f"Select {direction.title()}", lambda d=direction: v.navigate(d), key)
+        for direction, key in (
+            ("up", "Up"),
+            ("down", "Down"),
+            ("left", "Left"),
+            ("right", "Right"),
+        ):
+            a(
+                None,
+                f"Select {direction.title()}",
+                lambda d=direction: v.navigate(d),
+                key,
+            )
 
         m = required(bar.addMenu("&Help"))
         a(m, "Keyboard Shortcuts", self.show_shortcuts, "Ctrl+Shift+L", map_only=False)
@@ -179,7 +213,9 @@ class MainWindow(QMainWindow):
 
     def open_path(self, path: Path) -> None:
         try:
-            root = model.document_from_json(json.loads(path.read_text(encoding="utf-8")))
+            root = model.document_from_json(
+                json.loads(path.read_text(encoding="utf-8"))
+            )
         except (OSError, ValueError) as exc:
             QMessageBox.critical(self, "Open Failed", f"Could not open {path}:\n{exc}")
             return
@@ -192,23 +228,30 @@ class MainWindow(QMainWindow):
             return self.save_as()
         self.view.commit_edit()
         try:
-            data = json.dumps(model.document_to_json(self.view.root), ensure_ascii=False, indent=2)
+            data = json.dumps(
+                model.document_to_json(self.view.root), ensure_ascii=False, indent=2
+            )
             self.path.write_text(data + "\n", encoding="utf-8")
         except OSError as exc:
-            QMessageBox.critical(self, "Save Failed", f"Could not save {self.path}:\n{exc}")
+            QMessageBox.critical(
+                self, "Save Failed", f"Could not save {self.path}:\n{exc}"
+            )
             return False
         self.view.undo_stack.setClean()
         self._update_title()
         return True
 
     def save_as(self) -> bool:
-        name, _ = QFileDialog.getSaveFileName(self, "Save Mind Map", "untitled.mind", FILE_FILTER)
+        name, _ = QFileDialog.getSaveFileName(
+            self, "Save Mind Map", "untitled.mind", FILE_FILTER
+        )
         if not name:
             return False
         self.path = Path(name)
         return self.save()
 
-    def closeEvent(self, event: QCloseEvent) -> None:
+    def closeEvent(self, a0: QCloseEvent | None) -> None:
+        event = required(a0)
         if self.maybe_save():
             event.accept()
         else:

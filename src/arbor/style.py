@@ -14,7 +14,10 @@ CANVAS_BG = QColor("#FBFBFC")
 SELECTION = QColor("#2F7BF5")
 ROOT_FILL = QColor("#22304F")
 SUB_TEXT = QColor("#2B2B2B")
-PALETTE = [QColor(c) for c in ("#E8594A", "#F29B38", "#E9C33B", "#4DB86C", "#3D9BE0", "#8E6BD8")]
+PALETTE = [
+    QColor(c)
+    for c in ("#E8594A", "#F29B38", "#E9C33B", "#4DB86C", "#3D9BE0", "#8E6BD8")
+]
 MAX_TEXT_WIDTH = 280
 DRAG_DIM = 0.35
 DRAG_GHOST_OPACITY = 0.75

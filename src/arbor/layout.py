@@ -93,7 +93,9 @@ def layout(root: Topic, measure: Measure) -> dict[Topic, Placement]:
     return out
 
 
-def neighbor(topic: Topic, direction: str, placements: dict[Topic, Placement]) -> Topic | None:
+def neighbor(
+    topic: Topic, direction: str, placements: dict[Topic, Placement]
+) -> Topic | None:
     """Topic reached by an arrow key, following XMind's conventions.
 
     Left/Right move toward/away from the centre: into the child nearest vertically,
@@ -105,7 +107,9 @@ def neighbor(topic: Topic, direction: str, placements: dict[Topic, Placement]) -
         d = Side.RIGHT if direction == "right" else Side.LEFT
         if topic.parent is not None and p.side == -d:
             return topic.parent
-        cands = [c for c in topic.children if c in placements and placements[c].side == d]
+        cands = [
+            c for c in topic.children if c in placements and placements[c].side == d
+        ]
         return min(cands, key=lambda c: abs(placements[c].y - p.y)) if cands else None
 
     if direction not in ("up", "down"):
@@ -113,7 +117,11 @@ def neighbor(topic: Topic, direction: str, placements: dict[Topic, Placement]) -
     if topic.parent is None:
         return None
     d = 1 if direction == "down" else -1
-    sibs = [s for s in topic.parent.children if s in placements and placements[s].side == p.side]
+    sibs = [
+        s
+        for s in topic.parent.children
+        if s in placements and placements[s].side == p.side
+    ]
     j = sibs.index(topic) + d
     if 0 <= j < len(sibs):
         return sibs[j]
@@ -121,7 +129,10 @@ def neighbor(topic: Topic, direction: str, placements: dict[Topic, Placement]) -
     cands = [
         q
         for q, qp in placements.items()
-        if q is not topic and qp.side == p.side and q.depth == depth and (qp.y - p.y) * d > 0
+        if q is not topic
+        and qp.side == p.side
+        and q.depth == depth
+        and (qp.y - p.y) * d > 0
     ]
     return min(cands, key=lambda q: abs(placements[q].y - p.y)) if cands else None
 
@@ -139,7 +150,10 @@ class DropTarget:
 
 
 def drop_target(
-    dragged: Topic | Sequence[Topic], x: float, y: float, placements: dict[Topic, Placement]
+    dragged: Topic | Sequence[Topic],
+    x: float,
+    y: float,
+    placements: dict[Topic, Placement],
 ) -> DropTarget | None:
     """Where ``dragged`` (one topic or several) would land if dropped at scene point (x, y)."""
     group = [dragged] if isinstance(dragged, Topic) else dragged

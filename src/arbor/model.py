@@ -98,7 +98,9 @@ class Topic:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Topic:
-        topic = cls(text=str(data.get("text", "")), collapsed=bool(data.get("collapsed", False)))
+        topic = cls(
+            text=str(data.get("text", "")), collapsed=bool(data.get("collapsed", False))
+        )
         for child in data.get("children", []):
             topic.add(cls.from_dict(child))
         return topic
@@ -152,7 +154,9 @@ def insert_parent(topic: Topic) -> Topic | None:
         return None
     index = topic.index
     topic.detach()
-    new = parent.add(Topic("Topic" if not parent.is_root else default_text(parent)), index)
+    new = parent.add(
+        Topic("Topic" if not parent.is_root else default_text(parent)), index
+    )
     new.add(topic)
     return new
 

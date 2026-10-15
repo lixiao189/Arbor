@@ -13,7 +13,9 @@ if TYPE_CHECKING:
 class SnapshotCommand(QUndoCommand):
     """Undo step storing the whole document before and after a change."""
 
-    def __init__(self, canvas: MindMapView, label: str, before: tuple, after: tuple) -> None:
+    def __init__(
+        self, canvas: MindMapView, label: str, before: tuple, after: tuple
+    ) -> None:
         super().__init__(label)
         self.canvas, self.before, self.after = canvas, before, after
         self._applied = True  # the change is already live when the command is pushed

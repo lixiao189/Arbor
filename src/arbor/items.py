@@ -6,7 +6,16 @@ from functools import cache
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QFocusEvent, QFont, QKeyEvent, QPainter, QPen, QTextLayout, QTextOption
+from PyQt6.QtGui import (
+    QColor,
+    QFocusEvent,
+    QFont,
+    QKeyEvent,
+    QPainter,
+    QPen,
+    QTextLayout,
+    QTextOption,
+)
 from PyQt6.QtWidgets import (
     QApplication,
     QGraphicsItem,
@@ -19,7 +28,15 @@ from PyQt6.QtWidgets import (
 from .layout import Side
 from .model import Topic
 from .qtutil import required
-from .style import MAX_TEXT_WIDTH, SELECTION, SUB_TEXT, Z, branch_color, make_pen, style_for
+from .style import (
+    MAX_TEXT_WIDTH,
+    SELECTION,
+    SUB_TEXT,
+    Z,
+    branch_color,
+    make_pen,
+    style_for,
+)
 
 if TYPE_CHECKING:
     from .canvas import MindMapView
@@ -27,7 +44,9 @@ if TYPE_CHECKING:
 # Modifiers for toggling a topic in the selection. On macOS Qt reports Cmd as Control and the
 # physical Ctrl key as Meta (and turns Ctrl+click into a right-click), so accept all of them.
 TOGGLE_MODIFIERS = (
-    Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier | Qt.KeyboardModifier.ShiftModifier
+    Qt.KeyboardModifier.ControlModifier
+    | Qt.KeyboardModifier.MetaModifier
+    | Qt.KeyboardModifier.ShiftModifier
 )
 NO_WRAP = -1  # QGraphicsTextItem text width that disables wrapping
 UNWRAPPED_WIDTH = 1e6  # QTextLayout line width that effectively disables wrapping
@@ -49,9 +68,13 @@ class TopicText(QGraphicsTextItem):
     def is_editing(self) -> bool:
         return self.textInteractionFlags() != Qt.TextInteractionFlag.NoTextInteraction
 
-    def keyPressEvent(self, event: QKeyEvent) -> None:
+    def keyPressEvent(self, event: QKeyEvent | None) -> None:
+        event = required(event)
         key, mods = event.key(), event.modifiers()
-        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and not mods & Qt.KeyboardModifier.ShiftModifier:
+        if (
+            key in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+            and not mods & Qt.KeyboardModifier.ShiftModifier
+        ):
             self.committed.emit()
         elif key == Qt.Key.Key_Escape:
             self.cancelled.emit()
@@ -60,7 +83,8 @@ class TopicText(QGraphicsTextItem):
         else:
             super().keyPressEvent(event)
 
-    def focusOutEvent(self, event: QFocusEvent) -> None:
+    def focusOutEvent(self, event: QFocusEvent | None) -> None:
+        event = required(event)
         super().focusOutEvent(event)
         # Opening a menu or switching apps should not end the edit.
         if self.is_editing() and event.reason() not in (
@@ -118,11 +142,15 @@ class TopicItem(QGraphicsItem):
         self.style = style_for(topic)
         self.color = branch_color(topic)
         self.selected = False
-        self.toggling = False  # this press was a Ctrl+click: no drag, no narrowing on release
+        self.toggling = (
+            False  # this press was a Ctrl+click: no drag, no narrowing on release
+        )
         self.side = Side.CENTER
         self._w = self._h = 0.0
         self.font = label_font(self.style.font_size, self.style.bold)
-        self.text_color = QColor(Qt.GlobalColor.white) if self.style.filled else SUB_TEXT
+        self.text_color = (
+            QColor(Qt.GlobalColor.white) if self.style.filled else SUB_TEXT
+        )
         self.label: TopicText | None = None  # the inline editor, while editing
         self._layouts: list[QTextLayout] = []
         self._text_rect = QRectF()
@@ -185,9 +213,17 @@ class TopicItem(QGraphicsItem):
         return QRectF(-self._w / 2, -self._h / 2, self._w, self._h)
 
     def boundingRect(self) -> QRectF:
-        return self.body_rect().adjusted(-BOUNDS_MARGIN, -BOUNDS_MARGIN, BOUNDS_MARGIN, BOUNDS_MARGIN)
+        return self.body_rect().adjusted(
+            -BOUNDS_MARGIN, -BOUNDS_MARGIN, BOUNDS_MARGIN, BOUNDS_MARGIN
+        )
 
-    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None) -> None:
+    def paint(
+        self,
+        painter: QPainter | None,
+        option: QStyleOptionGraphicsItem | None,
+        widget: QWidget | None = None,
+    ) -> None:
+        painter = required(painter)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = self.body_rect()
         if self.style.filled:
@@ -201,7 +237,13 @@ class TopicItem(QGraphicsItem):
             painter.setPen(QPen(SELECTION, SELECTION_WIDTH))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             r = self.style.radius + SELECTION_RADIUS_EXTRA
-            painter.drawRoundedRect(rect.adjusted(-SELECTION_GAP, -SELECTION_GAP, SELECTION_GAP, SELECTION_GAP), r, r)
+            painter.drawRoundedRect(
+                rect.adjusted(
+                    -SELECTION_GAP, -SELECTION_GAP, SELECTION_GAP, SELECTION_GAP
+                ),
+                r,
+                r,
+            )
         if self.label is None:
             painter.setPen(self.text_color)
             for tl in self._layouts:
@@ -220,7 +262,8 @@ class TopicItem(QGraphicsItem):
         y = r.bottom() if not self.style.filled else 0.0
         return self.pos() + QPointF(-self.side * r.width() / 2, y)
 
-    def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
+    def mousePressEvent(self, event: QGraphicsSceneMouseEvent | None) -> None:
+        event = required(event)
         # While editing, clicks on the text are taken by the label itself.
         # Pressing a topic of a multi-selection keeps the group so it can be dragged.
         self.toggling = bool(event.modifiers() & TOGGLE_MODIFIERS)
@@ -230,7 +273,8 @@ class TopicItem(QGraphicsItem):
             self.canvas.select(self.topic)
         event.accept()
 
-    def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent) -> None:
+    def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent | None) -> None:
+        event = required(event)
         canvas = self.canvas
         if canvas.drag is None:
             if (
@@ -240,21 +284,31 @@ class TopicItem(QGraphicsItem):
                 or self.is_editing()
             ):
                 return
-            moved = event.screenPos() - event.buttonDownScreenPos(Qt.MouseButton.LeftButton)
+            moved = event.screenPos() - event.buttonDownScreenPos(
+                Qt.MouseButton.LeftButton
+            )
             if moved.manhattanLength() < QApplication.startDragDistance():
                 return
             canvas.begin_drag(self.topic)
         canvas.update_drag(event.scenePos())
 
-    def mouseReleaseEvent(self, event: QGraphicsSceneMouseEvent) -> None:
+    def mouseReleaseEvent(self, event: QGraphicsSceneMouseEvent | None) -> None:
+        event = required(event)
         if self.canvas.drag is not None:
             # Dropping rebuilds the scene, which deletes this item: leave its handler first.
             pos = event.scenePos()
             QTimer.singleShot(0, lambda canvas=self.canvas: canvas.end_drag(pos))
-        elif event.button() == Qt.MouseButton.LeftButton and len(self.canvas.selection) > 1 and not self.toggling:
-            self.canvas.select(self.topic)  # a click without dragging selects just this topic
+        elif (
+            event.button() == Qt.MouseButton.LeftButton
+            and len(self.canvas.selection) > 1
+            and not self.toggling
+        ):
+            self.canvas.select(
+                self.topic
+            )  # a click without dragging selects just this topic
 
-    def mouseDoubleClickEvent(self, event: QGraphicsSceneMouseEvent) -> None:
+    def mouseDoubleClickEvent(self, event: QGraphicsSceneMouseEvent | None) -> None:
+        event = required(event)
         if not self.is_editing():
             self.canvas.select(self.topic)
             self.canvas.start_edit()
@@ -281,7 +335,13 @@ class FoldBadge(QGraphicsItem):
         r = self.RADIUS + self.BOUNDS_MARGIN
         return QRectF(-r, -r, 2 * r, 2 * r)
 
-    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None) -> None:
+    def paint(
+        self,
+        painter: QPainter | None,
+        option: QStyleOptionGraphicsItem | None,
+        widget: QWidget | None = None,
+    ) -> None:
+        painter = required(painter)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(QPen(self.item.color, self.PEN_WIDTH))
         painter.setBrush(QColor("white"))
@@ -294,8 +354,8 @@ class FoldBadge(QGraphicsItem):
         text = str(self.count) if self.count <= self.MAX_COUNT else f"{self.MAX_COUNT}+"
         painter.drawText(self.boundingRect(), Qt.AlignmentFlag.AlignCenter, text)
 
-    def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
+    def mousePressEvent(self, event: QGraphicsSceneMouseEvent | None) -> None:
+        event = required(event)
         self.item.canvas.select(self.item.topic)
         self.item.canvas.toggle_collapse()
         event.accept()
-

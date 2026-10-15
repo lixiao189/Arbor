@@ -31,14 +31,16 @@ def test_add_child_and_sibling_names():
 def test_sibling_of_root_adds_child():
     root = tree()
     new = model.add_sibling(root)
-    assert new.parent is root
+    assert new is not None and new.parent is root
 
 
 def test_insert_parent():
     root = tree()
     a = root.children[0]
     p = model.insert_parent(a)
-    assert root.children[0] is p and p.children == [a] and a.parent is p
+    assert (
+        p is not None and root.children[0] is p and p.children == [a] and a.parent is p
+    )
     assert model.insert_parent(root) is None
 
 

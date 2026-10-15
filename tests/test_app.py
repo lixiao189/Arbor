@@ -1,13 +1,14 @@
 import sys
 
 import pytest
-from PyQt6.QtCore import QPointF, Qt
+from PyQt6.QtCore import QPoint, QPointF, Qt
 from PyQt6.QtGui import QMouseEvent
-from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication
 
 from arbor.app import MainWindow
 from arbor.layout import Side
+from arbor.model import Topic
+from arbor.qtutil import key_click, key_clicks, mouse_click, required
 
 K = Qt.Key
 M = Qt.KeyboardModifier
@@ -27,13 +28,13 @@ def win():
     w.close()
 
 
-def key(w, k, mods=M.NoModifier):
-    QTest.keyClick(w.view, k, mods)  # ty: ignore[no-matching-overload]
+def key(w: MainWindow, k: Qt.Key, mods: Qt.KeyboardModifier = M.NoModifier) -> None:
+    key_click(w.view, k, mods)
     QApplication.processEvents()
 
 
-def type_text(w, s):
-    QTest.keyClicks(w.view, s)  # ty: ignore[missing-argument]
+def type_text(w: MainWindow, s: str) -> None:
+    key_clicks(w.view, s)
     QApplication.processEvents()
 
 
@@ -47,26 +48,30 @@ def test_xmind_flow(win):
     assert v.selected is root
     key(win, K.Key_Right)
     main1 = v.selected
-    assert main1.parent is root
+    assert main1 is not None and main1.parent is root
 
     key(win, K.Key_Tab)  # new subtopic, in edit mode
-    assert v.editing is not None and v.selected.parent is main1
+    sub = v.selected
+    assert v.editing is not None and sub is not None and sub.parent is main1
     type_text(win, "Idea")
     key(win, K.Key_Return)  # commit
-    assert v.editing is None and v.selected.text == "Idea"
+    idea = v.selected
+    assert v.editing is None and idea is not None and idea.text == "Idea"
 
     key(win, K.Key_Return)  # sibling after
     assert v.editing is not None
     key(win, K.Key_Escape)
     assert v.editing is None
     sib = v.selected
-    assert sib.parent is main1 and sib.index == 1
+    assert sib is not None and sib.parent is main1 and sib.index == 1
 
     key(win, K.Key_Up)
-    assert v.selected.text == "Idea"
+    idea = v.selected
+    assert idea is not None and idea.text == "Idea"
     key(win, K.Key_Return, M.ControlModifier)  # insert parent
     key(win, K.Key_Escape)
-    assert v.selected.children[0].text == "Idea"
+    parent = v.selected
+    assert parent is not None and parent.children[0].text == "Idea"
     key(win, K.Key_Z, M.ControlModifier)
     assert v.root.at([0, 0]).text == "Idea"
 
@@ -75,16 +80,19 @@ def test_typing_replaces_text_and_undo(win):
     v = win.view
     key(win, K.Key_Home)
     key(win, K.Key_Right)
-    QTest.keyClicks(v, "X")  # ty: ignore[missing-argument, invalid-argument-type]
+    key_clicks(v, "X")
     QApplication.processEvents()
     assert v.editing is not None
     type_text(win, "yz")
     key(win, K.Key_Return)
-    assert v.selected.text == "Xyz"
+    edited = v.selected
+    assert edited is not None and edited.text == "Xyz"
     key(win, K.Key_Z, M.ControlModifier)
-    assert v.selected.text == "Main Topic 1"
+    restored = v.selected
+    assert restored is not None and restored.text == "Main Topic 1"
     key(win, K.Key_Z, M.ControlModifier | M.ShiftModifier)
-    assert v.selected.text == "Xyz"
+    redone = v.selected
+    assert redone is not None and redone.text == "Xyz"
 
 
 def test_delete_move_collapse(win):
@@ -99,7 +107,8 @@ def test_delete_move_collapse(win):
     key(win, K.Key_Left)
     assert v.selected is v.root.children[1]
     key(win, K.Key_Slash, M.ControlModifier)
-    assert v.selected.collapsed
+    collapsed = v.selected
+    assert collapsed is not None and collapsed.collapsed
     key(win, K.Key_Backspace)
     assert len(v.root.children) == 3
     key(win, K.Key_Delete)
@@ -113,8 +122,9 @@ def test_copy_paste(win):
     key(win, K.Key_C, M.ControlModifier)
     key(win, K.Key_Down)
     key(win, K.Key_V, M.ControlModifier)
-    assert v.selected.text == "Main Topic 1"
-    assert v.selected.parent is v.root.children[1]
+    pasted = v.selected
+    assert pasted is not None and pasted.text == "Main Topic 1"
+    assert pasted.parent is v.root.children[1]
 
 
 def test_destroying_dirty_window_does_not_touch_deleted_window():
@@ -144,8 +154,19 @@ def drag(w, src, dst, release=True):
 
     def send(kind, scene_pt, buttons):
         local = QPointF(v.mapFromScene(scene_pt))
-        btn = Qt.MouseButton.NoButton if kind == QMouseEvent.Type.MouseMove else Qt.MouseButton.LeftButton
-        ev = QMouseEvent(kind, local, QPointF(vp.mapToGlobal(local.toPoint())), btn, buttons, M.NoModifier)
+        btn = (
+            Qt.MouseButton.NoButton
+            if kind == QMouseEvent.Type.MouseMove
+            else Qt.MouseButton.LeftButton
+        )
+        ev = QMouseEvent(
+            kind,
+            local,
+            QPointF(vp.mapToGlobal(local.toPoint())),
+            btn,
+            buttons,
+            M.NoModifier,
+        )
         QApplication.sendEvent(vp, ev)
         QApplication.processEvents()
 
@@ -189,8 +210,14 @@ def mouse(w, kind, scene_pt, button=Qt.MouseButton.LeftButton, mods=M.NoModifier
     vp = v.viewport()
     local = QPointF(v.mapFromScene(scene_pt))
     btn = Qt.MouseButton.NoButton if kind == QMouseEvent.Type.MouseMove else button
-    held = Qt.MouseButton.NoButton if kind == QMouseEvent.Type.MouseButtonRelease else button
-    ev = QMouseEvent(kind, local, QPointF(vp.mapToGlobal(local.toPoint())), btn, held, mods)
+    held = (
+        Qt.MouseButton.NoButton
+        if kind == QMouseEvent.Type.MouseButtonRelease
+        else button
+    )
+    ev = QMouseEvent(
+        kind, local, QPointF(vp.mapToGlobal(local.toPoint())), btn, held, mods
+    )
     QApplication.sendEvent(vp, ev)
     QApplication.processEvents()
 
@@ -206,7 +233,9 @@ def canvas_drag(w, start, end, button=Qt.MouseButton.LeftButton, release=True):
 def box_around_right_topics(v):
     right = [t for t in v.root.children if v.placements[t].side is Side.RIGHT]
     rects = [v.topic_items[t].sceneBoundingRect() for t in right]
-    start = QPointF(max(r.right() for r in rects) + 20, min(r.top() for r in rects) - 20)
+    start = QPointF(
+        max(r.right() for r in rects) + 20, min(r.top() for r in rects) - 20
+    )
     end = QPointF(v.topic_items[right[0]].pos().x(), max(r.bottom() for r in rects) + 5)
     return right, start, end
 
@@ -263,7 +292,10 @@ def test_copy_paste_multiple_topics(win):
     key(win, K.Key_C, M.ControlModifier)
     v.select(v.root.children[3])
     key(win, K.Key_V, M.ControlModifier)
-    assert [c.text for c in v.root.children[3].children] == ["Main Topic 1", "Main Topic 2"]
+    assert [c.text for c in v.root.children[3].children] == [
+        "Main Topic 1",
+        "Main Topic 2",
+    ]
 
 
 def test_drag_moves_all_selected_topics(win):
@@ -285,10 +317,17 @@ def test_click_in_group_without_dragging_selects_one(win):
     assert v.selection == [m2] and m1.parent is v.root
 
 
-def ctrl_click(w, topic, mods=M.ControlModifier, button=Qt.MouseButton.LeftButton):
+def ctrl_click(
+    w: MainWindow,
+    topic: Topic,
+    mods: Qt.KeyboardModifier = M.ControlModifier,
+    button: Qt.MouseButton = Qt.MouseButton.LeftButton,
+) -> None:
     v = w.view
     local = v.mapFromScene(v.topic_items[topic].pos())
-    QTest.mouseClick(v.viewport(), button, mods, local)  # ty: ignore[no-matching-overload]
+    mouse_click(
+        required(v.viewport()), button, mods, QPoint(int(local.x()), int(local.y()))
+    )
     QApplication.processEvents()
 
 

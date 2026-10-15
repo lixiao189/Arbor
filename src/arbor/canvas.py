@@ -4,9 +4,24 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt, pyqtSignal
-from PyQt6.QtGui import QBrush, QKeyEvent, QMouseEvent, QPainter, QPainterPath, QTextCursor, QUndoStack, QWheelEvent
-from PyQt6.QtWidgets import QApplication, QGraphicsPathItem, QGraphicsScene, QGraphicsView, QWidget
+from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import (
+    QBrush,
+    QKeyEvent,
+    QMouseEvent,
+    QPainter,
+    QPainterPath,
+    QTextCursor,
+    QUndoStack,
+    QWheelEvent,
+)
+from PyQt6.QtWidgets import (
+    QApplication,
+    QGraphicsPathItem,
+    QGraphicsScene,
+    QGraphicsView,
+    QWidget,
+)
 
 from . import clipboard, model
 from .drag import DragState, Marquee, indicator_path, make_band, make_indicator
@@ -25,7 +40,9 @@ SELECT_MARGIN = 60  # kept visible around the selected topic
 AUTOSCROLL_MARGIN = 30  # kept visible around the cursor while dragging
 FOLD_BADGE_GAP = 3  # between a collapsed topic and its badge
 ROOT_EDGE_WIDTH, EDGE_WIDTH = 3.0, 1.8
-ROOT_EDGE_BEND = 0.2  # root edges reach the child's height this fraction of the way across
+ROOT_EDGE_BEND = (
+    0.2  # root edges reach the child's height this fraction of the way across
+)
 GHOST_OFFSET_X, GHOST_OFFSET_Y = 14, 10  # drag ghost, below-right of the cursor
 
 
@@ -37,7 +54,9 @@ class MindMapView(QGraphicsView):
         super().__init__(parent)
         self.map_scene = QGraphicsScene(self)
         self.setScene(self.map_scene)
-        self.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.TextAntialiasing)
+        self.setRenderHints(
+            QPainter.RenderHint.Antialiasing | QPainter.RenderHint.TextAntialiasing
+        )
         self.setBackgroundBrush(QBrush(CANVAS_BG))
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.FullViewportUpdate)
@@ -47,14 +66,20 @@ class MindMapView(QGraphicsView):
 
         self.undo_stack = QUndoStack(self)
         self.root: Topic = model.new_document()
-        self.selected: Topic | None = None  # primary selection: keyboard commands act on it
-        self.selection: list[Topic] = []  # all selected topics, primary first; may be empty
+        self.selected: Topic | None = (
+            None  # primary selection: keyboard commands act on it
+        )
+        self.selection: list[
+            Topic
+        ] = []  # all selected topics, primary first; may be empty
         self.topic_items: dict[Topic, TopicItem] = {}
         self.placements: dict[Topic, Placement] = {}
         self.editing: TopicItem | None = None
         self.drag: DragState | None = None
         self.marquee: Marquee | None = None
-        self._pan_from: QPoint | None = None  # last cursor position while right-dragging, in viewport coordinates
+        self._pan_from: QPoint | None = (
+            None  # last cursor position while right-dragging, in viewport coordinates
+        )
         self._edit_before: tuple | None = None
         self.rebuild()
 
@@ -127,17 +152,31 @@ class MindMapView(QGraphicsView):
             if topic.collapsed and topic.children:
                 badge = FoldBadge(item)
                 side = item.side.outward
-                badge.setPos(item.pos() + QPointF(side * (item.size()[0] / 2 + FoldBadge.RADIUS + FOLD_BADGE_GAP), 0))
+                badge.setPos(
+                    item.pos()
+                    + QPointF(
+                        side * (item.size()[0] / 2 + FoldBadge.RADIUS + FOLD_BADGE_GAP),
+                        0,
+                    )
+                )
                 self.map_scene.addItem(badge)
         bounds = self.map_scene.itemsBoundingRect()
-        self.map_scene.setSceneRect(bounds.adjusted(-SCENE_MARGIN_X, -SCENE_MARGIN_Y, SCENE_MARGIN_X, SCENE_MARGIN_Y))
+        self.map_scene.setSceneRect(
+            bounds.adjusted(
+                -SCENE_MARGIN_X, -SCENE_MARGIN_Y, SCENE_MARGIN_X, SCENE_MARGIN_Y
+            )
+        )
 
     def _add_edge(self, parent: TopicItem, child: TopicItem) -> None:
         start, end = parent.anchor_out(), child.anchor_in()
         path = QPainterPath(start)
         mid = (start.x() + end.x()) / 2
         if parent.topic.is_root:
-            path.cubicTo(QPointF(mid, start.y()), QPointF(start.x() + (end.x() - start.x()) * ROOT_EDGE_BEND, end.y()), end)
+            path.cubicTo(
+                QPointF(mid, start.y()),
+                QPointF(start.x() + (end.x() - start.x()) * ROOT_EDGE_BEND, end.y()),
+                end,
+            )
         else:
             path.cubicTo(QPointF(mid, start.y()), QPointF(mid, end.y()), end)
         edge = QGraphicsPathItem(path)
@@ -154,7 +193,9 @@ class MindMapView(QGraphicsView):
     def select(self, topic: Topic) -> None:
         self.set_selection([topic])
         if self.selected is not None:
-            self.ensureVisible(self.topic_items[self.selected], SELECT_MARGIN, SELECT_MARGIN)
+            self.ensureVisible(
+                self.topic_items[self.selected], SELECT_MARGIN, SELECT_MARGIN
+            )
 
     def set_selection(self, topics: list[Topic]) -> None:
         """Select several topics (or none); the first becomes the primary selection."""
@@ -179,7 +220,9 @@ class MindMapView(QGraphicsView):
 
     def navigate(self, direction: str) -> None:
         if self.selected is None:
-            self.select(self.root)  # XMind: with nothing selected, arrows start at the central topic
+            self.select(
+                self.root
+            )  # XMind: with nothing selected, arrows start at the central topic
             return
         target = neighbor(self.selected, direction, self.placements)
         if target is not None:
@@ -230,7 +273,9 @@ class MindMapView(QGraphicsView):
 
     def copy(self) -> None:
         if self.selection:
-            required(QApplication.clipboard()).setMimeData(clipboard.to_mime(model.top_level(self.selection)))
+            required(QApplication.clipboard()).setMimeData(
+                clipboard.to_mime(model.top_level(self.selection))
+            )
 
     def cut(self) -> None:
         if any(not t.is_root for t in self.selection):
@@ -262,9 +307,12 @@ class MindMapView(QGraphicsView):
         self._edit_before = self.snapshot()
         label = item.open_editor()
         label.setTextInteractionFlags(Qt.TextInteractionFlag.TextEditorInteraction)
-        label.committed.connect(self.commit_edit, Qt.ConnectionType.QueuedConnection)  # ty: ignore[too-many-positional-arguments]  # PyQt stubs omit the connection type
-        label.cancelled.connect(self.cancel_edit, Qt.ConnectionType.QueuedConnection)  # ty: ignore[too-many-positional-arguments]  # PyQt stubs omit the connection type
-        label.tab_pressed.connect(self._commit_and_add_child, Qt.ConnectionType.QueuedConnection)  # ty: ignore[too-many-positional-arguments]  # PyQt stubs omit the connection type
+        # Queued so the editor is not torn down from inside its own signal handler.
+        label.committed.connect(lambda: QTimer.singleShot(0, self.commit_edit))
+        label.cancelled.connect(lambda: QTimer.singleShot(0, self.cancel_edit))
+        label.tab_pressed.connect(
+            lambda: QTimer.singleShot(0, self._commit_and_add_child)
+        )
         label.setFocus(Qt.FocusReason.OtherFocusReason)
         cursor = label.textCursor()
         if initial_text is not None:
@@ -300,7 +348,9 @@ class MindMapView(QGraphicsView):
         topic = item.topic
         if text and text != topic.text and self._edit_before is not None:
             topic.text = text
-            self.undo_stack.push(SnapshotCommand(self, "Edit Topic", self._edit_before, self.snapshot()))
+            self.undo_stack.push(
+                SnapshotCommand(self, "Edit Topic", self._edit_before, self.snapshot())
+            )
         self.rebuild()
 
     def cancel_edit(self) -> None:
@@ -342,7 +392,16 @@ class MindMapView(QGraphicsView):
         drag.ghost.setPos(pos + QPointF(w / 2 + GHOST_OFFSET_X, h / 2 + GHOST_OFFSET_Y))
         drag.target = drop_target(drag.topics, pos.x(), pos.y(), self.placements)
         drag.indicator.setPath(indicator_path(drag.target, self.topic_items))
-        self.ensureVisible(QRectF(pos, pos).adjusted(-AUTOSCROLL_MARGIN, -AUTOSCROLL_MARGIN, AUTOSCROLL_MARGIN, AUTOSCROLL_MARGIN), 0, 0)
+        self.ensureVisible(
+            QRectF(pos, pos).adjusted(
+                -AUTOSCROLL_MARGIN,
+                -AUTOSCROLL_MARGIN,
+                AUTOSCROLL_MARGIN,
+                AUTOSCROLL_MARGIN,
+            ),
+            0,
+            0,
+        )
 
     def cancel_drag(self) -> None:
         drag, self.drag = self.drag, None
@@ -366,9 +425,14 @@ class MindMapView(QGraphicsView):
             return
         selection = list(self.selection)
         label = "Move Topics" if len(drag.topics) > 1 else "Move Topic"
-        if self.change(label, lambda _: model.reparent_all(drag.topics, target.parent, target.index)):
+        if self.change(
+            label,
+            lambda _: model.reparent_all(drag.topics, target.parent, target.index),
+        ):
             if len(drag.topics) > 1:
-                self.set_selection(selection)  # topics keep their identity, so the group stays selected
+                self.set_selection(
+                    selection
+                )  # topics keep their identity, so the group stays selected
 
     # --- marquee (drag on the empty canvas) selection
 
@@ -388,9 +452,24 @@ class MindMapView(QGraphicsView):
             return
         rect = QRectF(m.origin, pos).normalized()
         m.band.setRect(rect)
-        hits = [t for t, item in self.topic_items.items() if rect.intersects(item.body_rect().translated(item.pos()))]
-        self.set_selection(hits)  # a box touching nothing (a plain click) clears the selection
-        self.ensureVisible(QRectF(pos, pos).adjusted(-AUTOSCROLL_MARGIN, -AUTOSCROLL_MARGIN, AUTOSCROLL_MARGIN, AUTOSCROLL_MARGIN), 0, 0)
+        hits = [
+            t
+            for t, item in self.topic_items.items()
+            if rect.intersects(item.body_rect().translated(item.pos()))
+        ]
+        self.set_selection(
+            hits
+        )  # a box touching nothing (a plain click) clears the selection
+        self.ensureVisible(
+            QRectF(pos, pos).adjusted(
+                -AUTOSCROLL_MARGIN,
+                -AUTOSCROLL_MARGIN,
+                AUTOSCROLL_MARGIN,
+                AUTOSCROLL_MARGIN,
+            ),
+            0,
+            0,
+        )
 
     def end_marquee(self, cancel: bool = False) -> None:
         m, self.marquee = self.marquee, None
@@ -410,21 +489,27 @@ class MindMapView(QGraphicsView):
 
     def zoom_reset(self) -> None:
         self.resetTransform()
-        self.ensureVisible(self.topic_items[self.selected or self.root], SELECT_MARGIN, SELECT_MARGIN)
+        self.ensureVisible(
+            self.topic_items[self.selected or self.root], SELECT_MARGIN, SELECT_MARGIN
+        )
 
     def fit_map(self) -> None:
         self.resetTransform()
         bounds = QRectF()
         for item in self.topic_items.values():
             bounds = bounds.united(item.sceneBoundingRect())
-        self.fitInView(bounds.adjusted(-FIT_MARGIN, -FIT_MARGIN, FIT_MARGIN, FIT_MARGIN), Qt.AspectRatioMode.KeepAspectRatio)
+        self.fitInView(
+            bounds.adjusted(-FIT_MARGIN, -FIT_MARGIN, FIT_MARGIN, FIT_MARGIN),
+            Qt.AspectRatioMode.KeepAspectRatio,
+        )
         if self.transform().m11() > 1:
             self.resetTransform()
             self.centerOn(bounds.center())
 
     # --- Qt events
 
-    def keyPressEvent(self, event: QKeyEvent) -> None:
+    def keyPressEvent(self, event: QKeyEvent | None) -> None:
+        event = required(event)
         if self.drag is not None or self.marquee is not None:
             if event.key() == Qt.Key.Key_Escape:
                 self.cancel_drag()
@@ -438,13 +523,15 @@ class MindMapView(QGraphicsView):
             and text
             and text.isprintable()
             and not text.isspace()
-            and not mods & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier)
+            and not mods
+            & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier)
         ):
             self.start_edit(initial_text=text)
             return
         super().keyPressEvent(event)
 
-    def mousePressEvent(self, event: QMouseEvent) -> None:
+    def mousePressEvent(self, event: QMouseEvent | None) -> None:
+        event = required(event)
         # XMind: left-drag on the empty canvas draws a selection box, right-drag pans.
         pos = event.position().toPoint()
         if event.button() == Qt.MouseButton.LeftButton and self.drag is None:
@@ -453,25 +540,33 @@ class MindMapView(QGraphicsView):
                 self.begin_marquee(self.mapToScene(pos))
                 return
         # On macOS a Ctrl+click arrives as a right-click with Meta: that toggles, it doesn't pan.
-        if event.button() == Qt.MouseButton.RightButton and not event.modifiers() & Qt.KeyboardModifier.MetaModifier:
+        if (
+            event.button() == Qt.MouseButton.RightButton
+            and not event.modifiers() & Qt.KeyboardModifier.MetaModifier
+        ):
             self._pan_from = pos
             required(self.viewport()).setCursor(Qt.CursorShape.ClosedHandCursor)
         super().mousePressEvent(event)
 
-    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+    def mouseMoveEvent(self, event: QMouseEvent | None) -> None:
+        event = required(event)
         pos = event.position().toPoint()
         if self.marquee is not None:
             self.update_marquee(self.mapToScene(pos))
             return
         if self._pan_from is not None:
             delta, self._pan_from = pos - self._pan_from, pos
-            for bar, d in ((self.horizontalScrollBar(), delta.x()), (self.verticalScrollBar(), delta.y())):
+            for bar, d in (
+                (self.horizontalScrollBar(), delta.x()),
+                (self.verticalScrollBar(), delta.y()),
+            ):
                 bar = required(bar)
                 bar.setValue(bar.value() - d)
             return
         super().mouseMoveEvent(event)
 
-    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+    def mouseReleaseEvent(self, event: QMouseEvent | None) -> None:
+        event = required(event)
         if event.button() == Qt.MouseButton.LeftButton and self.marquee is not None:
             self.end_marquee()
             return
@@ -483,7 +578,8 @@ class MindMapView(QGraphicsView):
     def focusNextPrevChild(self, next: bool) -> bool:
         return False  # Tab belongs to "Insert Subtopic", not focus traversal
 
-    def wheelEvent(self, event: QWheelEvent) -> None:
+    def wheelEvent(self, event: QWheelEvent | None) -> None:
+        event = required(event)
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             self.zoom_by(WHEEL_ZOOM_BASE ** event.angleDelta().y())
         else:
