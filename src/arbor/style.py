@@ -18,6 +18,11 @@ PALETTE = [
     QColor(c)
     for c in ("#E8594A", "#F29B38", "#E9C33B", "#4DB86C", "#3D9BE0", "#8E6BD8")
 ]
+# Status bar hints: keys stand out, their descriptions recede.
+STATUS_KEY = QColor("#4A4A52")
+STATUS_TEXT = QColor("#9A9AA2")
+STATUS_BORDER = QColor("#E4E4E8")
+STATUS_FONT_SIZE = 12
 MAX_TEXT_WIDTH = 280
 DRAG_DIM = 0.35
 DRAG_GHOST_OPACITY = 0.75

@@ -9,14 +9,56 @@ from pathlib import Path
 
 from PyQt6.QtCore import QLoggingCategory, Qt
 from PyQt6.QtGui import QAction, QCloseEvent, QKeySequence
-from PyQt6.QtWidgets import QApplication, QFileDialog, QMainWindow, QMessageBox
+from PyQt6.QtWidgets import (
+    QApplication,
+    QFileDialog,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+)
 
-from . import model
+from . import model, style
 from .canvas import MindMapView
 from .qtutil import required
 from .shortcuts import ShortcutsDialog
 
 FILE_FILTER = "Mind Map (*.mind);;All Files (*)"
+
+HINT_GAP = "&nbsp;" * 8
+HINT_MARGIN = 24  # px kept clear on each side of the status bar hints
+
+# (keys, what they do) shown in the status bar for each state.
+Hints = Sequence[tuple[str, str]]
+MAP_HINTS: Hints = (
+    ("Tab", "subtopic"),
+    ("Enter", "sibling"),
+    ("Ctrl+Enter", "parent"),
+    ("Space / F2", "edit"),
+    ("Del", "delete"),
+    ("Arrows", "move"),
+)
+EDIT_HINTS: Hints = (
+    ("Enter", "finish"),
+    ("Shift+Enter", "new line"),
+    ("Esc", "cancel"),
+    ("Tab", "add subtopic"),
+)
+MULTI_HINTS: Hints = (
+    ("Del", "delete all"),
+    ("Ctrl+X", "cut all"),
+    ("Ctrl+C", "copy all"),
+)
+
+
+def hints_html(hints: Hints, lead: str = "") -> str:
+    key = style.STATUS_KEY.name()
+    gap = HINT_GAP
+    parts = [f'<b style="color:{key}">{lead}</b>'] if lead else []
+    parts += [
+        f'<span style="color:{key}; font-weight:600">{k}</span>&nbsp;&nbsp;{label}'
+        for k, label in hints
+    ]
+    return gap.join(parts)
 
 Keys = str | Sequence[str]
 
@@ -36,6 +78,7 @@ class MainWindow(QMainWindow):
             tuple[str, str, str]
         ] = []  # (menu, label, keys) for the help dialog
         self._build_menus()
+        self._build_status_bar()
 
         self.view.editingChanged.connect(self._on_editing_changed)
         # Bound methods (not lambdas) so PyQt disconnects them when the window is
@@ -171,14 +214,41 @@ class MainWindow(QMainWindow):
         self.setWindowModified(not self.view.undo_stack.isClean())
         self.setWindowTitle(f"{name}[*] — Arbor")
 
+    def _build_status_bar(self) -> None:
+        bar = required(self.statusBar())
+        bar.setSizeGripEnabled(False)
+        bar.setStyleSheet(
+            f"QStatusBar {{ background: {style.CANVAS_BG.name()};"
+            f" border-top: 1px solid {style.STATUS_BORDER.name()}; }}"
+            " QStatusBar::item { border: none; }"
+        )
+        self.hint = QLabel()
+        self.hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.hint.setTextFormat(Qt.TextFormat.RichText)
+        self.hint.setStyleSheet(
+            f"color: {style.STATUS_TEXT.name()};"
+            f" font-size: {style.STATUS_FONT_SIZE}px; padding: 4px 0;"
+        )
+        bar.addWidget(self.hint, 1)
+        # Never narrower than the widest hint line, so it is never clipped.
+        widest = 0
+        for html in (
+            hints_html(MAP_HINTS),
+            hints_html(EDIT_HINTS, "Editing"),
+            hints_html(MULTI_HINTS, "999 selected"),
+        ):
+            self.hint.setText(html)
+            widest = max(widest, self.hint.sizeHint().width())
+        self.setMinimumWidth(widest + 2 * HINT_MARGIN)
+
     def _update_status(self) -> None:
         if self.view.editing is not None:
-            msg = "Editing — Enter to finish, Shift+Enter for a new line, Esc to cancel, Tab to add a subtopic"
+            html = hints_html(EDIT_HINTS, "Editing")
         elif len(self.view.selection) > 1:
-            msg = f"{len(self.view.selection)} topics selected — Del, Cut and Copy apply to all of them"
+            html = hints_html(MULTI_HINTS, f"{len(self.view.selection)} selected")
         else:
-            msg = "Tab: subtopic · Enter: sibling · Ctrl+Enter: parent · Space/F2: edit · Del: delete · Arrows: move"
-        required(self.statusBar()).showMessage(msg)
+            html = hints_html(MAP_HINTS)
+        self.hint.setText(html)
 
     # --- files
 
