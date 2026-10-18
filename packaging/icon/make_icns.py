@@ -2,7 +2,8 @@
 
 Usage: python packaging/icon/make_icns.py <output .icns>
 
-The layers are drawn back to front and clipped to the macOS app icon shape (a
+The layers (the background, then the Icon Composer layers in Arbor.icon/Assets)
+are drawn back to front and clipped to the macOS app icon shape (a
 continuous-corner rounded square inset in the 1024 canvas), so the result
 matches what Icon Composer produces and macOS Tahoe doesn't put it on a plate.
 Needs PyQt6 (QtSvg) and macOS's iconutil.
@@ -21,7 +22,15 @@ from PyQt6.QtGui import QGuiApplication, QImage, QPainter, QPainterPath
 from PyQt6.QtSvg import QSvgRenderer
 
 HERE = Path(__file__).parent
-LAYERS = ["0-background", "1-branches", "2-subtopics", "3-root"]
+ICON_ASSETS = HERE / "Arbor.icon" / "Assets"
+# Arbor.icon draws the background as its fill (see icon.json), so it is the
+# only layer kept outside the bundle.
+LAYERS = [
+    HERE / "0-background.svg",
+    ICON_ASSETS / "1-branches.svg",
+    ICON_ASSETS / "2-subtopics.svg",
+    ICON_ASSETS / "3-root.svg",
+]
 
 # macOS app icon grid, in units of the 1024 canvas.
 CANVAS = 1024
@@ -83,8 +92,8 @@ def render(size: int) -> QImage:
     painter = QPainter(image)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
     painter.setClipPath(icon_shape(shape, SHAPE_RADIUS * scale))
-    for name in LAYERS:
-        QSvgRenderer(str(HERE / f"{name}.svg")).render(painter, shape)
+    for layer in LAYERS:
+        QSvgRenderer(str(layer)).render(painter, shape)
     painter.end()
     return image
 

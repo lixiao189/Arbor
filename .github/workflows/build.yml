@@ -34,7 +34,8 @@ jobs:
           - os: ubuntu-24.04-arm
             name: linux-aarch64
             exe: dist/Arbor/Arbor
-          - os: macos-14
+          # Needs Xcode 26+ to compile the Icon Composer icon (packaging/icon/Arbor.icon).
+          - os: macos-26
             name: macos-arm64
             exe: dist/Arbor.app/Contents/MacOS/Arbor
           - os: windows-2022
@@ -52,6 +53,15 @@ jobs:
         run: >
           uv run --locked --with pyinstaller
           pyinstaller --noconfirm packaging/arbor.spec
+
+      # The spec falls back to the .icns alone without Xcode 26; make sure CI
+      # never ships that fallback.
+      - name: Check Liquid Glass icon (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          test -f dist/Arbor.app/Contents/Resources/Assets.car
+          test "$(plutil -extract CFBundleIconName raw dist/Arbor.app/Contents/Info.plist)" = Arbor
+          xcrun assetutil --info dist/Arbor.app/Contents/Resources/Assets.car
 
       # A virtual X server plus the libraries Qt's xcb platform plugin loads.
       - name: Install display for smoke test (Linux)

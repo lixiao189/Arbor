@@ -6,6 +6,7 @@
 # Arbor only uses QtCore, QtGui and QtWidgets, but PyInstaller's PyQt6 hooks
 # still collect every Qt plugin of those modules along with the libraries the
 # plugins link. The filters below drop the ones the app never loads.
+import plistlib
 import shutil
 import subprocess
 import sys
@@ -42,6 +43,16 @@ LIBPYTHON_STRIP_ARGS = ["-x"] if sys.platform == "darwin" else None
 # The app icon is rendered from the layer SVGs in packaging/icon at build time
 # (macOS only; it needs iconutil).
 ICON_SCRIPT = Path(SPECPATH, "icon", "make_icns.py")
+
+# The Icon Composer icon, which gives macOS 26+ the Liquid Glass icon and its
+# dark, clear and tinted variants. Compiling it into Assets.car needs the actool
+# of Xcode 26 or later; without it the app only gets the .icns above.
+ICON_COMPOSER = Path(SPECPATH, "icon", "Arbor.icon")
+ICON_NAME = ICON_COMPOSER.stem  # actool's --app-icon, and CFBundleIconName
+ICON_COMPOSER_XCODE = 26
+# Deployment target for actool, low enough that Assets.car also carries flat
+# renditions for macOS versions before 26.
+ICON_MIN_MACOS = "11.0"
 
 
 def qt_lib_name(part):
@@ -96,6 +107,49 @@ def make_icns():
     return str(icns)
 
 
+def actool_major_version():
+    """Major version of Xcode's actool, or None if only the Command Line Tools are installed."""
+    if subprocess.run(["xcrun", "--find", "actool"], capture_output=True).returncode != 0:
+        return None
+    result = subprocess.run(
+        ["xcrun", "actool", "--version", "--output-format", "xml1"],
+        capture_output=True,
+        check=True,
+    )
+    version = plistlib.loads(result.stdout)["com.apple.actool.version"]["short-bundle-version"]
+    return int(version.split(".")[0])
+
+
+def compile_asset_catalog():
+    """Compile Arbor.icon into an Assets.car in the build directory and return its path.
+
+    Returns None off macOS, or when no Xcode with Icon Composer support is installed.
+    """
+    if sys.platform != "darwin":
+        return None
+    version = actool_major_version()
+    if version is None or version < ICON_COMPOSER_XCODE:
+        print(f"Xcode {ICON_COMPOSER_XCODE}+ actool not found; Arbor.app gets only the .icns icon")
+        return None
+    out = Path(workpath, "assets")
+    shutil.rmtree(out, ignore_errors=True)
+    out.mkdir(parents=True)
+    subprocess.run(
+        [
+            "xcrun", "actool", ICON_COMPOSER,
+            "--compile", out,
+            "--app-icon", ICON_NAME,
+            "--platform", "macosx",
+            "--target-device", "mac",
+            "--minimum-deployment-target", ICON_MIN_MACOS,
+            "--output-partial-info-plist", out / "partial.plist",
+            "--errors", "--warnings",
+        ],
+        check=True,
+    )
+    return out / "Assets.car"
+
+
 exe = EXE(
     pyz,
     a.scripts,
@@ -106,4 +160,16 @@ exe = EXE(
     console=False,
 )
 coll = COLLECT(exe, a.binaries, a.datas, strip=STRIP, name="Arbor")
-app = BUNDLE(coll, name="Arbor.app", icon=make_icns(), bundle_identifier=None)
+
+# With an Assets.car, macOS takes the icon named by CFBundleIconName from it;
+# the .icns (CFBundleIconFile, which BUNDLE sets from `icon`) stays as the
+# fallback for builds without one.
+asset_catalog = compile_asset_catalog()
+app = BUNDLE(
+    coll,
+    [("Assets.car", str(asset_catalog), "DATA")] if asset_catalog else [],
+    name="Arbor.app",
+    icon=make_icns(),
+    info_plist={"CFBundleIconName": ICON_NAME} if asset_catalog else None,
+    bundle_identifier=None,
+)
