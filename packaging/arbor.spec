@@ -39,6 +39,10 @@ STRIP = sys.platform != "win32"
 # copy itself (PyInstaller re-signs it ad hoc afterwards).
 LIBPYTHON_STRIP_ARGS = ["-x"] if sys.platform == "darwin" else None
 
+# The app icon is rendered from the layer SVGs in packaging/icon at build time
+# (macOS only; it needs iconutil).
+ICON_SCRIPT = Path(SPECPATH, "icon", "make_icns.py")
+
 
 def qt_lib_name(part):
     """'QtPdf.framework' / 'libQt6Pdf.so.6' / 'Qt6Pdf.dll' -> 'QtPdf'."""
@@ -82,6 +86,16 @@ a.datas = [entry for entry in a.datas if not is_unused(entry[0])]
 
 pyz = PYZ(a.pure)
 
+
+def make_icns():
+    """Render the app icon into the build directory and return its path."""
+    if sys.platform != "darwin":
+        return None
+    icns = Path(workpath, "Arbor.icns")
+    subprocess.run([sys.executable, ICON_SCRIPT, icns], check=True)
+    return str(icns)
+
+
 exe = EXE(
     pyz,
     a.scripts,
@@ -92,4 +106,4 @@ exe = EXE(
     console=False,
 )
 coll = COLLECT(exe, a.binaries, a.datas, strip=STRIP, name="Arbor")
-app = BUNDLE(coll, name="Arbor.app", bundle_identifier=None)
+app = BUNDLE(coll, name="Arbor.app", icon=make_icns(), bundle_identifier=None)
