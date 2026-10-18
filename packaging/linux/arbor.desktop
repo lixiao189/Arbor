@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Arbor
+GenericName=Mind Map Editor
+Comment=Keyboard-first mind map editor
+Exec=arbor %f
+Icon=arbor
+Terminal=false
+Categories=Office;
+Keywords=mind map;mindmap;outline;

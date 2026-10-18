@@ -17,6 +17,12 @@ Arbor is in alpha. The latest [nightly build](https://github.com/lixiao189/Arbor
 - [Linux (x86_64)](https://github.com/lixiao189/Arbor/releases/download/nightly/Arbor-linux-x86_64.tar.gz)
 - [Linux (aarch64)](https://github.com/lixiao189/Arbor/releases/download/nightly/Arbor-linux-aarch64.tar.gz)
 
+On Linux, to add Arbor to your desktop's app list, extract the archive somewhere permanent, then run from the extracted `Arbor` folder:
+
+```bash
+ln -s "$PWD/Arbor" ~/.local/bin/arbor && cp -r share ~/.local/
+```
+
 ## Quick start
 
 Arbor needs [uv](https://docs.astral.sh/uv/) (Python 3.13).

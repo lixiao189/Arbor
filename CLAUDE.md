@@ -25,6 +25,7 @@ Layers, from pure to Qt-heavy:
 - **`layout.py`** – no Qt imports. Computes a balanced left/right layout (`layout()` → `dict[Topic, Placement]`, centres in scene coordinates), arrow-key navigation (`neighbor()`), and drag-drop hit testing (`drop_target()`). Topic sizes are injected via a `measure` callback, so it is unit-tested without Qt.
 - **`style.py`** – colours and the per-depth `Style` (root / main / subtopic), `branch_color()`.
 - **`items.py`** – `TopicItem` (a topic's body; forwards mouse events to the view), its `TopicText` label that doubles as the inline editor, and `FoldBadge`.
+- **`icon.py`** – the window icon (PNGs in `icons/`, rendered by `packaging/icon/make_pngs.py`), set on Windows and Linux only: on macOS it would replace the bundle's Liquid Glass Dock icon.
 - **`qtutil.py`** – `required()`, which narrows Qt getters the PyQt6 stubs type as Optional.
 - **`drag.py`** – `DragState` / `Marquee` dataclasses and the drop-indicator path; **`clipboard.py`** – topics ↔ `QMimeData` (own JSON format plus a text outline); **`undo.py`** – `SnapshotCommand`.
 - **`canvas.py`** – `MindMapView` (`QGraphicsView`) owns the document (`root`, `selected`, plus `selection` for multi-select via a left-drag box on the empty canvas or Ctrl+click; right-drag pans; `selected` is `selection[0]`, or `None` when nothing is selected, which is the initial state; `change()` is a no-op then), the undo stack, inline editing and dragging.

@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
 )
 
-from . import model, style
+from . import icon, model, style
 from .canvas import MindMapView
 from .qtutil import required
 from .shortcuts import ShortcutsDialog
@@ -339,6 +339,7 @@ def main() -> None:
     QLoggingCategory.setFilterRules("qt.qpa.keymapper.warning=false")
     app = QApplication(sys.argv)
     app.setApplicationName("Arbor")
+    icon.install(app)
     path = Path(sys.argv[1]) if len(sys.argv) > 1 else None
     window = MainWindow(path)
     window.show()
