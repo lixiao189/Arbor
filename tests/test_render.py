@@ -1,14 +1,11 @@
 import pytest
-from PyQt6.QtWidgets import QApplication
 
 from arbor import model, style
 from arbor.model import Topic
 from arbor.render import EDGE_WIDTH, ROOT_EDGE_WIDTH, render
 
 
-@pytest.fixture(autouse=True)
-def app():
-    return QApplication.instance() or QApplication([])  # theme() reads the system scheme
+pytestmark = pytest.mark.usefixtures("qapp")  # theme() reads the system scheme
 
 
 def tree():
