@@ -29,7 +29,7 @@ from .items import FoldBadge, TopicItem
 from .layout import Placement, drop_target, layout, neighbor
 from .model import Topic
 from .qtutil import required
-from .style import CANVAS_BG, DRAG_DIM, DRAG_GHOST_OPACITY, Z, make_pen
+from .style import DRAG_DIM, DRAG_GHOST_OPACITY, Z, make_pen, theme
 from .undo import SnapshotCommand
 
 MIN_ZOOM, MAX_ZOOM = 0.2, 4.0
@@ -57,7 +57,7 @@ class MindMapView(QGraphicsView):
         self.setRenderHints(
             QPainter.RenderHint.Antialiasing | QPainter.RenderHint.TextAntialiasing
         )
-        self.setBackgroundBrush(QBrush(CANVAS_BG))
+        self.setBackgroundBrush(QBrush(theme().canvas_bg))
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.FullViewportUpdate)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -136,6 +136,14 @@ class MindMapView(QGraphicsView):
             self.select(self.selected)
         else:
             self.set_selection([])
+
+    def apply_theme(self) -> None:
+        """Repaint in the current light or dark theme."""
+        self.setBackgroundBrush(QBrush(theme().canvas_bg))
+        if self.editing is not None:
+            self.commit_edit()  # rebuilds
+        else:
+            self.rebuild()
 
     def apply_layout(self) -> None:
         self.placements = layout(self.root, lambda t: self.topic_items[t].size())

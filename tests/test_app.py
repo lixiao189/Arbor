@@ -353,3 +353,38 @@ def test_shift_and_mac_ctrl_click_also_toggle(win):
     # On macOS the physical Ctrl key arrives as Meta, and Ctrl+click as a right-click.
     ctrl_click(win, m3, M.MetaModifier, Qt.MouseButton.RightButton)
     assert v.selection == [m1, m2, m3]
+
+
+def test_switching_to_dark_mode_recolours_the_map(win, monkeypatch):
+    from arbor import style
+
+    v = win.view
+    key(win, K.Key_Right)
+    key(win, K.Key_Right)
+    key(win, K.Key_Tab)  # a subtopic, being edited
+    type_text(win, "Idea")
+    assert v.editing is not None
+    sub = v.selected
+    assert sub is not None
+    assert v.topic_items[sub].text_color == style.LIGHT.sub_text
+
+    # The offscreen platform can't change its colour scheme, so fake the system's.
+    monkeypatch.setattr(style, "theme_for", lambda _scheme: style.DARK)
+    win._on_color_scheme_changed(Qt.ColorScheme.Dark)
+    QApplication.processEvents()
+
+    assert v.editing is None and v.selected is not None
+    assert v.selected.text == "Idea"  # the edit was kept
+    assert v.topic_items[v.selected].text_color == style.DARK.sub_text
+    assert v.backgroundBrush().color() == style.DARK.canvas_bg
+    assert style.branch_color(v.root) == style.DARK.root_fill
+    assert style.DARK.canvas_bg.name() in required(win.statusBar()).styleSheet()
+    assert style.DARK.status_key.name() in win.hint.text()
+
+
+def test_theme_follows_color_scheme():
+    from arbor import style
+
+    assert style.theme_for(Qt.ColorScheme.Dark) is style.DARK
+    assert style.theme_for(Qt.ColorScheme.Light) is style.LIGHT
+    assert style.theme_for(Qt.ColorScheme.Unknown) is style.LIGHT
