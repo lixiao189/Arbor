@@ -1,0 +1,48 @@
+# Flatpak manifest for Arbor. Build and install it from the repository root:
+#     flatpak-builder --user --install --install-deps-from=flathub --force-clean \
+#         build-dir packaging/flatpak/io.github.lixiao189.Arbor.yml
+#
+# The PyQt6 wheels come from python-deps.json (generated from uv.lock by
+# make_python_deps.py); they bundle their own Qt, so the plain freedesktop
+# runtime is enough. Its Python must match make_python_deps.PYTHON_VERSION.
+id: io.github.lixiao189.Arbor
+runtime: org.freedesktop.Platform
+runtime-version: "25.08"
+sdk: org.freedesktop.Sdk
+command: arbor
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  # No filesystem access: Qt's file dialogs go through the document portal.
+
+modules:
+  - python-deps.json
+
+  - name: arbor
+    buildsystem: simple
+    build-commands:
+      - >
+        cp -r arbor "$(python3 -c 'import sys, sysconfig;
+        print(sysconfig.get_path("purelib", vars={"base": sys.argv[1]}))' "${FLATPAK_DEST}")"
+      - install -Dm755 arbor.sh "${FLATPAK_DEST}/bin/arbor"
+      - install -Dm644 -t "${FLATPAK_DEST}/share/applications" "${FLATPAK_ID}.desktop"
+      - install -Dm644 -t "${FLATPAK_DEST}/share/metainfo" "${FLATPAK_ID}.metainfo.xml"
+      - >
+        for png in arbor/icons/arbor-*.png; do
+        size=$(basename "$png" .png | cut -d- -f2);
+        install -Dm644 "$png" "${FLATPAK_DEST}/share/icons/hicolor/${size}x${size}/apps/${FLATPAK_ID}.png";
+        done
+    sources:
+      - type: dir
+        path: ../../src/arbor
+        dest: arbor
+        skip:
+          - __pycache__
+      - type: file
+        path: arbor.sh
+      - type: file
+        path: io.github.lixiao189.Arbor.desktop
+      - type: file
+        path: io.github.lixiao189.Arbor.metainfo.xml

@@ -6,3 +6,9 @@ wheels/
 *.egg-info
 .venv
 .pytest_cache/
+
+# flatpak-builder
+.flatpak-builder/
+build-dir/
+repo/
+*.flatpak

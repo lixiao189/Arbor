@@ -28,12 +28,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-24.04
-            name: linux-x86_64
-            exe: dist/Arbor/Arbor
-          - os: ubuntu-24.04-arm
-            name: linux-aarch64
-            exe: dist/Arbor/Arbor
           # Needs Xcode 26+ to compile the Icon Composer icon (packaging/icon/Arbor.icon).
           - os: macos-26
             name: macos-arm64
@@ -63,30 +57,13 @@ jobs:
           test "$(plutil -extract CFBundleIconName raw dist/Arbor.app/Contents/Info.plist)" = Arbor
           xcrun assetutil --info dist/Arbor.app/Contents/Resources/Assets.car
 
-      # A virtual X server plus the libraries Qt's xcb platform plugin loads.
-      - name: Install display for smoke test (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb libegl1 libgl1 libfontconfig1 libdbus-1-3 \
-            libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
-            libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 \
-            libxcb-xinerama0
-
       - name: Smoke test
         shell: bash
-        run: |
-          run=(uv run --no-project python packaging/smoke_test.py "${{ matrix.exe }}")
-          if [ "$RUNNER_OS" = Linux ]; then run=(xvfb-run -a "${run[@]}"); fi
-          "${run[@]}"
+        run: uv run --no-project python packaging/smoke_test.py "${{ matrix.exe }}"
 
       - name: Package (macOS)
         if: runner.os == 'macOS'
         run: ditto -c -k --keepParent dist/Arbor.app "Arbor-${{ matrix.name }}.zip"
-
-      - name: Package (Linux)
-        if: runner.os == 'Linux'
-        run: tar -czf "Arbor-${{ matrix.name }}.tar.gz" -C dist Arbor
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
@@ -97,3 +74,48 @@ jobs:
         with:
           name: app-${{ matrix.name }}
           path: Arbor-${{ matrix.name }}.*
+
+  # Linux ships as a Flatpak bundle, built from packaging/flatpak.
+  flatpak:
+    name: flatpak (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            arch: x86_64
+          - os: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.os }}
+    env:
+      APP_ID: io.github.lixiao189.Arbor
+      FLATHUB: https://dl.flathub.org/repo/flathub.flatpakrepo
+      BUNDLE: Arbor-linux-${{ matrix.arch }}.flatpak
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Flatpak
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder xvfb dbus
+          # Ubuntu 24.04 blocks the unprivileged user namespaces bubblewrap needs.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          flatpak remote-add --user --if-not-exists flathub "$FLATHUB"
+
+      - name: Build Flatpak bundle
+        run: |
+          flatpak-builder --user --install-deps-from=flathub --disable-rofiles-fuse \
+            --force-clean --repo=repo build-dir "packaging/flatpak/$APP_ID.yml"
+          # --runtime-repo lets `flatpak install` fetch the runtime from Flathub.
+          flatpak build-bundle --runtime-repo="$FLATHUB" repo "$BUNDLE" "$APP_ID"
+
+      - name: Smoke test
+        run: |
+          flatpak install --user -y --noninteractive --bundle "$BUNDLE"
+          xvfb-run -a dbus-run-session -- \
+            python3 packaging/smoke_test.py flatpak run "$APP_ID"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: app-linux-${{ matrix.arch }}
+          path: ${{ env.BUNDLE }}

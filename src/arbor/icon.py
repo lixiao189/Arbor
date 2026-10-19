@@ -16,9 +16,9 @@ from PyQt6.QtWidgets import QApplication
 
 ICON_DIR = Path(__file__).parent / "icons"
 ICON_GLOB = "arbor-*.png"
-# Matches arbor.desktop, which the Linux build ships; Wayland compositors take
-# the window's icon from it.
-DESKTOP_FILE_NAME = "arbor"
+# The Flatpak's app ID, which names its desktop file; Wayland compositors take
+# the window's icon from that file.
+DESKTOP_FILE_NAME = "io.github.lixiao189.Arbor"
 # Groups Arbor's windows on the Windows taskbar under its own icon, rather than
 # under python.exe's when run from source.
 APP_USER_MODEL_ID = "Arbor.Arbor"

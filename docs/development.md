@@ -27,8 +27,22 @@ The icon is drawn from the layer SVGs in `packaging/icon` (`render.py`):
 
 - macOS: `make_icns.py` (the `.icns`) and `Arbor.icon` (Icon Composer, compiled into `Assets.car`), both built by `packaging/arbor.spec`
 - Windows: `make_ico.py`, built into `Arbor.exe` by the spec
-- Windows and Linux window icon: `make_pngs.py` writes the checked-in `src/arbor/icons/arbor-*.png`; rerun it after changing the SVGs. The Linux build also installs these PNGs, with `packaging/linux/arbor.desktop`, under `share/` in the bundle
+- Windows and Linux window icon: `make_pngs.py` writes the checked-in `src/arbor/icons/arbor-*.png`; rerun it after changing the SVGs. The Flatpak also installs these PNGs as its hicolor icons
 
 ```bash
 uv run python packaging/icon/make_pngs.py
+```
+
+## Flatpak (Linux)
+
+Linux builds ship as a Flatpak, `io.github.lixiao189.Arbor`, from `packaging/flatpak`. The manifest installs the PyQt6 wheels pinned in `uv.lock` (listed with their hashes in the generated `python-deps.json`) on the freedesktop runtime. Regenerate that file after `uv lock` changes the runtime dependencies; `tests/test_flatpak.py` fails while it is stale:
+
+```bash
+uv run python packaging/flatpak/make_python_deps.py
+```
+
+To build and install it locally (needs `flatpak-builder` and the Flathub remote):
+
+```bash
+flatpak-builder --user --install --install-deps-from=flathub --force-clean build-dir packaging/flatpak/io.github.lixiao189.Arbor.yml
 ```
