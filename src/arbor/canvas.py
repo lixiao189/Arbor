@@ -73,6 +73,8 @@ class MindMapView(QGraphicsView):
             Topic
         ] = []  # all selected topics, primary first; may be empty
         self.topic_items: dict[Topic, TopicItem] = {}
+        self.edges: dict[TopicItem, QGraphicsPathItem] = {}  # keyed by the child's item
+        self.badges: dict[TopicItem, FoldBadge] = {}
         self.placements: dict[Topic, Placement] = {}
         self.editing: TopicItem | None = None
         self.drag: DragState | None = None
@@ -94,7 +96,7 @@ class MindMapView(QGraphicsView):
         self.center_root()
 
     def snapshot(self) -> tuple:
-        return self.root.to_dict(), self.selected.path() if self.selected else None
+        return self.root.to_dict(keep_uids=True), self.selected.path() if self.selected else None
 
     def restore(self, snap: tuple) -> None:
         self.cancel_edit()
@@ -123,14 +125,29 @@ class MindMapView(QGraphicsView):
     # --- rendering
 
     def rebuild(self) -> None:
-        self.drag = self.marquee = None
+        """Bring the scene in line with the tree, keyed by ``Topic.uid`` like React's keys:
+        items of topics still visible are reused and patched, the rest added or removed."""
+        self.cancel_drag()
+        self.end_marquee()
         scene = self.map_scene
-        scene.clear()
+        old = {item.topic.uid: item for item in self.topic_items.values()}
         self.topic_items = {}
         for topic in self.root.walk_visible():
-            item = TopicItem(topic, self)
-            scene.addItem(item)
+            item = old.pop(topic.uid, None)
+            if item is None:
+                item = TopicItem(topic, self)
+                scene.addItem(item)
+            else:
+                item.bind(topic)
+                if item.selected:
+                    item.selected = False  # reselected below
+                    item.update()
             self.topic_items[topic] = item
+        for item in old.values():
+            scene.removeItem(item)
+            for decorations in (self.edges, self.badges):
+                if item in decorations:
+                    scene.removeItem(decorations.pop(item))
         self.apply_layout()
         if self.selected is not None:
             self.select(self.selected)
@@ -144,6 +161,7 @@ class MindMapView(QGraphicsView):
             self.commit_edit()  # rebuilds
         else:
             self.rebuild()
+        self.map_scene.update()  # selection outlines and badges read the theme when painted
 
     def apply_layout(self) -> None:
         self.placements = layout(self.root, lambda t: self.topic_items[t].size())
@@ -151,23 +169,9 @@ class MindMapView(QGraphicsView):
             item = self.topic_items[topic]
             item.side = p.side
             item.setPos(p.x, p.y)
-        for child in list(self.map_scene.items()):
-            if isinstance(child, (QGraphicsPathItem, FoldBadge)):
-                self.map_scene.removeItem(child)
         for topic, item in self.topic_items.items():
-            if topic.parent is not None:
-                self._add_edge(self.topic_items[topic.parent], item)
-            if topic.collapsed and topic.children:
-                badge = FoldBadge(item)
-                side = item.side.outward
-                badge.setPos(
-                    item.pos()
-                    + QPointF(
-                        side * (item.size()[0] / 2 + FoldBadge.RADIUS + FOLD_BADGE_GAP),
-                        0,
-                    )
-                )
-                self.map_scene.addItem(badge)
+            self._sync_edge(topic, item)
+            self._sync_badge(topic, item)
         bounds = self.map_scene.itemsBoundingRect()
         self.map_scene.setSceneRect(
             bounds.adjusted(
@@ -175,7 +179,49 @@ class MindMapView(QGraphicsView):
             )
         )
 
-    def _add_edge(self, parent: TopicItem, child: TopicItem) -> None:
+    def _sync_edge(self, topic: Topic, child: TopicItem) -> None:
+        """Create, update or remove the edge from ``topic``'s parent to it."""
+        edge = self.edges.get(child)
+        if topic.parent is None:
+            if edge is not None:
+                self.map_scene.removeItem(self.edges.pop(child))
+            return
+        parent = self.topic_items[topic.parent]
+        path = self._edge_path(parent, child)
+        pen = make_pen(
+            child.color, ROOT_EDGE_WIDTH if parent.topic.is_root else EDGE_WIDTH
+        )
+        if edge is None:
+            edge = self.edges[child] = QGraphicsPathItem()
+            edge.setZValue(Z.EDGE)
+            self.map_scene.addItem(edge)
+        if edge.path() != path:
+            edge.setPath(path)
+        if edge.pen() != pen:
+            edge.setPen(pen)
+
+    def _sync_badge(self, topic: Topic, item: TopicItem) -> None:
+        """Create, update or remove the fold badge of a collapsed topic."""
+        badge = self.badges.get(item)
+        if not (topic.collapsed and topic.children):
+            if badge is not None:
+                self.map_scene.removeItem(self.badges.pop(item))
+            return
+        if badge is None:
+            badge = self.badges[item] = FoldBadge(item)
+            self.map_scene.addItem(badge)
+        badge.count = topic.descendant_count()
+        badge.update()  # the count or branch colour may have changed
+        side = item.side.outward
+        badge.setPos(
+            item.pos()
+            + QPointF(
+                side * (item.size()[0] / 2 + FoldBadge.RADIUS + FOLD_BADGE_GAP), 0
+            )
+        )
+
+    @staticmethod
+    def _edge_path(parent: TopicItem, child: TopicItem) -> QPainterPath:
         start, end = parent.anchor_out(), child.anchor_in()
         path = QPainterPath(start)
         mid = (start.x() + end.x()) / 2
@@ -187,11 +233,7 @@ class MindMapView(QGraphicsView):
             )
         else:
             path.cubicTo(QPointF(mid, start.y()), QPointF(mid, end.y()), end)
-        edge = QGraphicsPathItem(path)
-        width = ROOT_EDGE_WIDTH if parent.topic.is_root else EDGE_WIDTH
-        edge.setPen(make_pen(child.color, width))
-        edge.setZValue(Z.EDGE)
-        self.map_scene.addItem(edge)
+        return path
 
     def center_root(self) -> None:
         self.centerOn(self.topic_items[self.root])

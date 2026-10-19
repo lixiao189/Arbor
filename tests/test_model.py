@@ -110,3 +110,12 @@ def test_reparent_all_keeps_document_order():
     assert model.reparent_all([b], root, 2) is b and root.children == [d, b]
     assert model.reparent_all([d], a1, 0) is None  # into its own subtree
     assert model.reparent_all([root], b, 0) is None
+
+
+def test_uids_survive_snapshots_but_not_files_or_clones():
+    root = tree()
+    again = Topic.from_dict(root.to_dict(keep_uids=True))
+    assert [t.uid for t in again.walk()] == [t.uid for t in root.walk()]
+    assert "uid" not in str(model.document_to_json(root))
+    clone = root.clone()
+    assert not {t.uid for t in clone.walk()} & {t.uid for t in root.walk()}
