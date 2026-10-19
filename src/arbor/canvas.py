@@ -29,6 +29,7 @@ from .items import FoldBadge, TopicItem
 from .layout import Placement, drop_target, layout, neighbor
 from .model import Topic
 from .qtutil import required
+from .render import node_for, render
 from .style import DRAG_DIM, DRAG_GHOST_OPACITY, Z, make_pen, theme
 from .undo import SnapshotCommand
 
@@ -39,7 +40,6 @@ FIT_MARGIN = 40  # around the map in "Fit Map"
 SELECT_MARGIN = 60  # kept visible around the selected topic
 AUTOSCROLL_MARGIN = 30  # kept visible around the cursor while dragging
 FOLD_BADGE_GAP = 3  # between a collapsed topic and its badge
-ROOT_EDGE_WIDTH, EDGE_WIDTH = 3.0, 1.8
 ROOT_EDGE_BEND = (
     0.2  # root edges reach the child's height this fraction of the way across
 )
@@ -125,20 +125,23 @@ class MindMapView(QGraphicsView):
     # --- rendering
 
     def rebuild(self) -> None:
-        """Bring the scene in line with the tree, keyed by ``Topic.uid`` like React's keys:
-        items of topics still visible are reused and patched, the rest added or removed."""
+        """Bring the scene in line with the tree, like a virtual DOM diff: ``render()``
+        describes every visible topic, items are matched to nodes by ``uid`` (React's keys)
+        and patched only where their node differs; the rest are added or removed."""
         self.cancel_drag()
         self.end_marquee()
         scene = self.map_scene
-        old = {item.topic.uid: item for item in self.topic_items.values()}
+        old = {item.node.uid: item for item in self.topic_items.values()}
         self.topic_items = {}
-        for topic in self.root.walk_visible():
-            item = old.pop(topic.uid, None)
+        for topic, node in render(self.root).items():
+            item = old.pop(node.uid, None)
             if item is None:
-                item = TopicItem(topic, self)
+                item = TopicItem(topic, node, self)
                 scene.addItem(item)
             else:
-                item.bind(topic)
+                item.topic = topic  # the same topic, possibly rebuilt by undo
+                if item.patch(node) and item in self.badges:
+                    self.badges[item].update()  # it draws the node's colour and count
                 if item.selected:
                     item.selected = False  # reselected below
                     item.update()
@@ -169,9 +172,9 @@ class MindMapView(QGraphicsView):
             item = self.topic_items[topic]
             item.side = p.side
             item.setPos(p.x, p.y)
-        for topic, item in self.topic_items.items():
-            self._sync_edge(topic, item)
-            self._sync_badge(topic, item)
+        for item in self.topic_items.values():
+            self._sync_edge(item)
+            self._sync_badge(item)
         bounds = self.map_scene.itemsBoundingRect()
         self.map_scene.setSceneRect(
             bounds.adjusted(
@@ -179,18 +182,19 @@ class MindMapView(QGraphicsView):
             )
         )
 
-    def _sync_edge(self, topic: Topic, child: TopicItem) -> None:
-        """Create, update or remove the edge from ``topic``'s parent to it."""
-        edge = self.edges.get(child)
-        if topic.parent is None:
+    def _sync_edge(self, child: TopicItem) -> None:
+        """Create, update or remove the edge from a topic's parent to it."""
+        edge, width, parent = (
+            self.edges.get(child),
+            child.node.edge_width,
+            child.topic.parent,
+        )
+        if width is None or parent is None:
             if edge is not None:
                 self.map_scene.removeItem(self.edges.pop(child))
             return
-        parent = self.topic_items[topic.parent]
-        path = self._edge_path(parent, child)
-        pen = make_pen(
-            child.color, ROOT_EDGE_WIDTH if parent.topic.is_root else EDGE_WIDTH
-        )
+        path = self._edge_path(self.topic_items[parent], child)
+        pen = make_pen(child.color, width)
         if edge is None:
             edge = self.edges[child] = QGraphicsPathItem()
             edge.setZValue(Z.EDGE)
@@ -200,18 +204,16 @@ class MindMapView(QGraphicsView):
         if edge.pen() != pen:
             edge.setPen(pen)
 
-    def _sync_badge(self, topic: Topic, item: TopicItem) -> None:
+    def _sync_badge(self, item: TopicItem) -> None:
         """Create, update or remove the fold badge of a collapsed topic."""
         badge = self.badges.get(item)
-        if not (topic.collapsed and topic.children):
+        if item.node.hidden_count is None:
             if badge is not None:
                 self.map_scene.removeItem(self.badges.pop(item))
             return
         if badge is None:
             badge = self.badges[item] = FoldBadge(item)
             self.map_scene.addItem(badge)
-        badge.count = topic.descendant_count()
-        badge.update()  # the count or branch colour may have changed
         side = item.side.outward
         badge.setPos(
             item.pos()
@@ -420,7 +422,7 @@ class MindMapView(QGraphicsView):
         self.commit_edit()
         group = model.top_level([t for t in self.selection if not t.is_root])
         topics = group if topic in group else [topic]
-        ghost = TopicItem(topic, self)
+        ghost = TopicItem(topic, node_for(topic), self)
         if len(topics) > 1:
             ghost.set_text(f"{topic.text}  +{len(topics) - 1}")
         ghost.setOpacity(DRAG_GHOST_OPACITY)
