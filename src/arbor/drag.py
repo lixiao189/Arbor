@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import QGraphicsPathItem, QGraphicsRectItem
 from .items import TopicItem
 from .layout import DropTarget, Side
 from .model import Topic
-from .style import SELECTION, Z, make_pen
+from .style import Z, make_pen, theme
 
 INDICATOR_WIDTH = 3
 INDICATOR_PAD = 4  # outline of a "child" target, outside the topic body
@@ -46,14 +46,15 @@ class Marquee:
 def make_indicator() -> QGraphicsPathItem:
     indicator = QGraphicsPathItem()
     indicator.setZValue(Z.DROP_INDICATOR)
-    indicator.setPen(make_pen(SELECTION, INDICATOR_WIDTH))
+    indicator.setPen(make_pen(theme().selection, INDICATOR_WIDTH))
     return indicator
 
 
 def make_band() -> QGraphicsRectItem:
     band = QGraphicsRectItem()
-    band.setPen(QPen(SELECTION, BAND_WIDTH))
-    fill = QColor(SELECTION)
+    selection = theme().selection
+    band.setPen(QPen(selection, BAND_WIDTH))
+    fill = QColor(selection)
     fill.setAlpha(BAND_ALPHA)
     band.setBrush(fill)
     band.setZValue(Z.MARQUEE)

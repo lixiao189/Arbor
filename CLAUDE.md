@@ -23,7 +23,7 @@ Layers, from pure to Qt-heavy:
 
 - **`model.py`** – `Topic` tree (dataclass with `eq=False`, so equality/hashing is by identity and topics are used as dict keys everywhere). Editing operations are module-level functions that mutate the tree and **return the topic to select next, or `None` if the operation doesn't apply**. `.mind` files are JSON: `{"version": 1, "root": {...}}`.
 - **`layout.py`** – no Qt imports. Computes a balanced left/right layout (`layout()` → `dict[Topic, Placement]`, centres in scene coordinates), arrow-key navigation (`neighbor()`), and drag-drop hit testing (`drop_target()`). Topic sizes are injected via a `measure` callback, so it is unit-tested without Qt.
-- **`style.py`** – colours and the per-depth `Style` (root / main / subtopic), `branch_color()`.
+- **`style.py`** – colours and the per-depth `Style` (root / main / subtopic), `branch_color()`. Colours that differ between light and dark mode live in a `Theme` (`LIGHT` / `DARK`); read them through `theme()`, which follows the system colour scheme. `MainWindow` re-themes (status bar, `view.apply_theme()` → rebuild) when `colorSchemeChanged` fires; on Windows it swaps the light-only `windowsvista` style for Fusion.
 - **`items.py`** – `TopicItem` (a topic's body; forwards mouse events to the view), its `TopicText` label that doubles as the inline editor, and `FoldBadge`.
 - **`icon.py`** – the window icon (PNGs in `icons/`, rendered by `packaging/icon/make_pngs.py`), set on Windows and Linux only: on macOS it would replace the bundle's Liquid Glass Dock icon.
 - **`qtutil.py`** – `required()`, which narrows Qt getters the PyQt6 stubs type as Optional.

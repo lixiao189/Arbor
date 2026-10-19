@@ -23,6 +23,8 @@ from .qtutil import required
 from .shortcuts import ShortcutsDialog
 
 FILE_FILTER = "Mind Map (*.mind);;All Files (*)"
+LIGHT_ONLY_STYLE = "windowsvista"
+DARK_CAPABLE_STYLE = "Fusion"
 
 HINT_GAP = "&nbsp;" * 8
 HINT_MARGIN = 24  # px kept clear on each side of the status bar hints
@@ -51,7 +53,7 @@ MULTI_HINTS: Hints = (
 
 
 def hints_html(hints: Hints, lead: str = "") -> str:
-    key = style.STATUS_KEY.name()
+    key = style.theme().status_key.name()
     gap = HINT_GAP
     parts = [f'<b style="color:{key}">{lead}</b>'] if lead else []
     parts += [
@@ -85,6 +87,9 @@ class MainWindow(QMainWindow):
         # destroyed; the undo stack still emits while it is being torn down.
         self.view.undo_stack.cleanChanged.connect(self._update_title)
         self.view.selectionChanged.connect(self._update_status)
+        required(QApplication.styleHints()).colorSchemeChanged.connect(
+            self._on_color_scheme_changed
+        )
 
         if path is not None:
             self.open_path(path)
@@ -217,18 +222,10 @@ class MainWindow(QMainWindow):
     def _build_status_bar(self) -> None:
         bar = required(self.statusBar())
         bar.setSizeGripEnabled(False)
-        bar.setStyleSheet(
-            f"QStatusBar {{ background: {style.CANVAS_BG.name()};"
-            f" border-top: 1px solid {style.STATUS_BORDER.name()}; }}"
-            " QStatusBar::item { border: none; }"
-        )
         self.hint = QLabel()
         self.hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.hint.setTextFormat(Qt.TextFormat.RichText)
-        self.hint.setStyleSheet(
-            f"color: {style.STATUS_TEXT.name()};"
-            f" font-size: {style.STATUS_FONT_SIZE}px; padding: 4px 0;"
-        )
+        self._style_status_bar()
         bar.addWidget(self.hint, 1)
         # Never narrower than the widest hint line, so it is never clipped.
         widest = 0
@@ -240,6 +237,23 @@ class MainWindow(QMainWindow):
             self.hint.setText(html)
             widest = max(widest, self.hint.sizeHint().width())
         self.setMinimumWidth(widest + 2 * HINT_MARGIN)
+
+    def _style_status_bar(self) -> None:
+        theme = style.theme()
+        required(self.statusBar()).setStyleSheet(
+            f"QStatusBar {{ background: {theme.canvas_bg.name()};"
+            f" border-top: 1px solid {theme.status_border.name()}; }}"
+            " QStatusBar::item { border: none; }"
+        )
+        self.hint.setStyleSheet(
+            f"color: {theme.status_text.name()};"
+            f" font-size: {style.STATUS_FONT_SIZE}px; padding: 4px 0;"
+        )
+
+    def _on_color_scheme_changed(self, _scheme: Qt.ColorScheme) -> None:
+        self._style_status_bar()
+        self.view.apply_theme()
+        self._update_status()
 
     def _update_status(self) -> None:
         if self.view.editing is not None:
@@ -339,6 +353,10 @@ def main() -> None:
     QLoggingCategory.setFilterRules("qt.qpa.keymapper.warning=false")
     app = QApplication(sys.argv)
     app.setApplicationName("Arbor")
+    # The classic Windows style (the default before Windows 11) is light-only;
+    # Fusion follows the system's dark mode, like the native styles elsewhere.
+    if sys.platform == "win32" and required(app.style()).name() == LIGHT_ONLY_STYLE:
+        app.setStyle(DARK_CAPABLE_STYLE)
     icon.install(app)
     path = Path(sys.argv[1]) if len(sys.argv) > 1 else None
     window = MainWindow(path)

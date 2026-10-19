@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
-    QColor,
     QFocusEvent,
     QFont,
     QKeyEvent,
@@ -29,13 +28,13 @@ from .layout import Side
 from .model import Topic
 from .qtutil import required
 from .style import (
+    FILLED_TEXT,
     MAX_TEXT_WIDTH,
-    SELECTION,
-    SUB_TEXT,
     Z,
     branch_color,
     make_pen,
     style_for,
+    theme,
 )
 
 if TYPE_CHECKING:
@@ -148,9 +147,7 @@ class TopicItem(QGraphicsItem):
         self.side = Side.CENTER
         self._w = self._h = 0.0
         self.font = label_font(self.style.font_size, self.style.bold)
-        self.text_color = (
-            QColor(Qt.GlobalColor.white) if self.style.filled else SUB_TEXT
-        )
+        self.text_color = FILLED_TEXT if self.style.filled else theme().sub_text
         self.label: TopicText | None = None  # the inline editor, while editing
         self._layouts: list[QTextLayout] = []
         self._text_rect = QRectF()
@@ -234,7 +231,7 @@ class TopicItem(QGraphicsItem):
             painter.setPen(make_pen(self.color, UNDERLINE_WIDTH))
             painter.drawLine(rect.bottomLeft(), rect.bottomRight())
         if self.selected:
-            painter.setPen(QPen(SELECTION, SELECTION_WIDTH))
+            painter.setPen(QPen(theme().selection, SELECTION_WIDTH))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             r = self.style.radius + SELECTION_RADIUS_EXTRA
             painter.drawRoundedRect(
@@ -344,7 +341,7 @@ class FoldBadge(QGraphicsItem):
         painter = required(painter)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(QPen(self.item.color, self.PEN_WIDTH))
-        painter.setBrush(QColor("white"))
+        painter.setBrush(theme().badge_fill)
         painter.drawEllipse(QPointF(0, 0), self.RADIUS, self.RADIUS)
         font = QFont()
         font.setPointSize(self.FONT_SIZE)

@@ -6,26 +6,67 @@ from dataclasses import dataclass
 from enum import IntEnum
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor, QPen
+from PyQt6.QtGui import QColor, QGuiApplication, QPen
 
 from .model import Topic
+from .qtutil import required
 
-CANVAS_BG = QColor("#FBFBFC")
-SELECTION = QColor("#2F7BF5")
-ROOT_FILL = QColor("#22304F")
-SUB_TEXT = QColor("#2B2B2B")
+# Main topics and their branches; bright enough to read on either canvas.
 PALETTE = [
     QColor(c)
     for c in ("#E8594A", "#F29B38", "#E9C33B", "#4DB86C", "#3D9BE0", "#8E6BD8")
 ]
-# Status bar hints: keys stand out, their descriptions recede.
-STATUS_KEY = QColor("#4A4A52")
-STATUS_TEXT = QColor("#9A9AA2")
-STATUS_BORDER = QColor("#E4E4E8")
+FILLED_TEXT = QColor(Qt.GlobalColor.white)  # text on filled (root and main) topics
 STATUS_FONT_SIZE = 12
 MAX_TEXT_WIDTH = 280
 DRAG_DIM = 0.35
 DRAG_GHOST_OPACITY = 0.75
+
+
+@dataclass(frozen=True)
+class Theme:
+    """Colours that follow the system's light or dark appearance."""
+
+    canvas_bg: QColor
+    selection: QColor
+    root_fill: QColor
+    sub_text: QColor
+    badge_fill: QColor  # inside the fold badge
+    # Status bar hints: keys stand out, their descriptions recede.
+    status_key: QColor
+    status_text: QColor
+    status_border: QColor
+
+
+LIGHT = Theme(
+    canvas_bg=QColor("#FBFBFC"),
+    selection=QColor("#2F7BF5"),
+    root_fill=QColor("#22304F"),
+    sub_text=QColor("#2B2B2B"),
+    badge_fill=QColor("#FFFFFF"),
+    status_key=QColor("#4A4A52"),
+    status_text=QColor("#9A9AA2"),
+    status_border=QColor("#E4E4E8"),
+)
+DARK = Theme(
+    canvas_bg=QColor("#1E1F23"),
+    selection=QColor("#4C8DF6"),
+    root_fill=QColor("#3C5080"),
+    sub_text=QColor("#E4E4E8"),
+    badge_fill=QColor("#2A2B30"),
+    status_key=QColor("#D2D2D8"),
+    status_text=QColor("#85858E"),
+    status_border=QColor("#33343A"),
+)
+
+
+def theme_for(scheme: Qt.ColorScheme) -> Theme:
+    return DARK if scheme == Qt.ColorScheme.Dark else LIGHT
+
+
+def theme() -> Theme:
+    """The theme for the system's current appearance (light when it is unknown)."""
+    return theme_for(required(QGuiApplication.styleHints()).colorScheme())
 
 
 class Z(IntEnum):
@@ -66,7 +107,7 @@ def style_for(topic: Topic) -> Style:
 
 def branch_color(topic: Topic) -> QColor:
     if topic.parent is None:
-        return ROOT_FILL
+        return theme().root_fill
     node = topic
     while node.parent is not None and node.parent.parent is not None:
         node = node.parent
