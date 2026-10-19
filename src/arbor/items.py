@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
+    QColor,
     QFocusEvent,
     QFont,
     QKeyEvent,
@@ -30,6 +31,7 @@ from .qtutil import required
 from .style import (
     FILLED_TEXT,
     MAX_TEXT_WIDTH,
+    Style,
     Z,
     branch_color,
     make_pen,
@@ -131,6 +133,12 @@ def layout_text(text: str, font: QFont) -> tuple[list[QTextLayout], float, float
     return layouts, MAX_TEXT_WIDTH, height
 
 
+def looks(topic: Topic) -> tuple[Style, QColor, QColor]:
+    """A topic's style, branch colour and text colour."""
+    style = style_for(topic)
+    return style, branch_color(topic), FILLED_TEXT if style.filled else theme().sub_text
+
+
 class TopicItem(QGraphicsItem):
     """A topic's body. Its text is painted directly; a ``TopicText`` exists only while editing."""
 
@@ -138,8 +146,7 @@ class TopicItem(QGraphicsItem):
         super().__init__()
         self.topic = topic
         self.canvas = canvas
-        self.style = style_for(topic)
-        self.color = branch_color(topic)
+        self.style, self.color, self.text_color = looks(topic)
         self.selected = False
         self.toggling = (
             False  # this press was a Ctrl+click: no drag, no narrowing on release
@@ -147,19 +154,34 @@ class TopicItem(QGraphicsItem):
         self.side = Side.CENTER
         self._w = self._h = 0.0
         self.font = label_font(self.style.font_size, self.style.bold)
-        self.text_color = FILLED_TEXT if self.style.filled else theme().sub_text
         self.label: TopicText | None = None  # the inline editor, while editing
         self._layouts: list[QTextLayout] = []
         self._text_rect = QRectF()
+        self._text = ""  # the text laid out in _layouts
         self.set_text(topic.text)
         self.setZValue(Z.TOPIC)
+
+    def bind(self, topic: Topic) -> None:
+        """Reuse this item for ``topic`` (the same topic, possibly rebuilt by undo), redoing
+        only the work its changes need."""
+        self.topic = topic
+        style, color, text_color = looks(topic)
+        restyled = style != self.style
+        if restyled or color != self.color or text_color != self.text_color:
+            self.style, self.color, self.text_color = style, color, text_color
+            self.font = label_font(style.font_size, style.bold)
+            self.update()
+        if restyled or topic.text != self._text:
+            self.set_text(topic.text)
 
     def is_editing(self) -> bool:
         return self.label is not None
 
     def set_text(self, text: str) -> None:
+        self._text = text
         self._layouts, w, h = layout_text(text, self.font)
         self._set_text_size(w, h)
+        self.update()
 
     def open_editor(self) -> TopicText:
         label = self.label = TopicText(self)
@@ -292,7 +314,7 @@ class TopicItem(QGraphicsItem):
     def mouseReleaseEvent(self, event: QGraphicsSceneMouseEvent | None) -> None:
         event = required(event)
         if self.canvas.drag is not None:
-            # Dropping rebuilds the scene, which deletes this item: leave its handler first.
+            # Dropping rebuilds the scene, which may remove this item: leave its handler first.
             pos = event.scenePos()
             QTimer.singleShot(0, lambda canvas=self.canvas: canvas.end_drag(pos))
         elif (

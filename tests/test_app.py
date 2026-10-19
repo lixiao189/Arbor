@@ -355,6 +355,74 @@ def test_shift_and_mac_ctrl_click_also_toggle(win):
     assert v.selection == [m1, m2, m3]
 
 
+def scene_counts(v) -> tuple[int, int, int]:
+    """Topic items, edges and fold badges in the scene."""
+    from PyQt6.QtWidgets import QGraphicsPathItem
+
+    from arbor.items import FoldBadge, TopicItem
+
+    items = v.map_scene.items()
+    return (
+        sum(isinstance(i, TopicItem) for i in items),
+        sum(isinstance(i, QGraphicsPathItem) for i in items),
+        sum(isinstance(i, FoldBadge) for i in items),
+    )
+
+
+def test_rebuild_reuses_items_of_unchanged_topics(win):
+    v = win.view
+    key(win, K.Key_Right)
+    key(win, K.Key_Right)
+    before = dict(v.topic_items)
+    key(win, K.Key_Tab)  # a new subtopic
+    key(win, K.Key_Return)
+    for topic, item in before.items():
+        assert v.topic_items[topic] is item
+    assert scene_counts(v) == (6, 5, 0)
+
+
+def test_undo_reuses_items_although_topics_are_rebuilt(win):
+    v = win.view
+    key(win, K.Key_Right)
+    key(win, K.Key_Right)
+    deleted = v.selected
+    assert deleted is not None
+    kept = {t.uid: i for t, i in v.topic_items.items() if t is not deleted}
+    key(win, K.Key_Delete)
+    assert scene_counts(v) == (4, 3, 0)
+    key(win, K.Key_Z, M.ControlModifier)
+    # Survivors keep their items; the deleted topic's item was removed, so it gets a new one.
+    uids = {t.uid: i for t, i in v.topic_items.items()}
+    assert {u: uids[u] for u in kept} == kept and deleted.uid in uids
+    assert all(item.topic is t for t, item in v.topic_items.items())
+    assert v.selected is not None and v.topic_items[v.selected].selected
+    assert sum(item.selected for item in v.topic_items.values()) == 1
+    assert scene_counts(v) == (5, 4, 0)
+
+
+def test_rebuild_restyles_moved_topics_and_tracks_badges(win):
+    from arbor import model, style
+
+    v = win.view
+    main = v.root.children[0]
+    v.select(main)
+    v.add_child()
+    v.commit_edit()
+    sub = v.selected
+    assert sub is not None and v.topic_items[sub].style is style.SUB_STYLE
+    v.change("Move", lambda t: model.reparent(t, v.root, 0))
+    item = v.topic_items[sub]
+    assert item.style is style.MAIN_STYLE and item.text_color == style.FILLED_TEXT
+    v.select(main)
+    v.add_child()
+    v.commit_edit()
+    v.select(main)
+    v.toggle_collapse()
+    assert scene_counts(v) == (6, 5, 1)
+    v.toggle_collapse()
+    assert scene_counts(v) == (7, 6, 0)
+
+
 def test_switching_to_dark_mode_recolours_the_map(win, monkeypatch):
     from arbor import style
 

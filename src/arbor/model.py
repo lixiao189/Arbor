@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import itertools
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
 FILE_VERSION = 1
+_next_uid = itertools.count(1).__next__
 
 
 @dataclass(eq=False)
@@ -17,6 +19,8 @@ class Topic:
     children: list[Topic] = field(default_factory=list)
     parent: Topic | None = field(default=None, repr=False)
     collapsed: bool = False
+    # Stable key for reusing scene items: survives undo (snapshots keep it), never saved to files.
+    uid: int = field(default_factory=_next_uid, repr=False, kw_only=True)
 
     @property
     def is_root(self) -> bool:
@@ -88,12 +92,15 @@ class Topic:
             node = node.parent
         return False
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, keep_uids: bool = False) -> dict[str, Any]:
+        """Serialize the subtree; ``keep_uids`` is for undo snapshots, not files or the clipboard."""
         data: dict[str, Any] = {"text": self.text}
+        if keep_uids:
+            data["uid"] = self.uid
         if self.collapsed:
             data["collapsed"] = True
         if self.children:
-            data["children"] = [c.to_dict() for c in self.children]
+            data["children"] = [c.to_dict(keep_uids) for c in self.children]
         return data
 
     @classmethod
@@ -101,6 +108,8 @@ class Topic:
         topic = cls(
             text=str(data.get("text", "")), collapsed=bool(data.get("collapsed", False))
         )
+        if isinstance(data.get("uid"), int):
+            topic.uid = data["uid"]
         for child in data.get("children", []):
             topic.add(cls.from_dict(child))
         return topic
