@@ -28,16 +28,8 @@ from PyQt6.QtWidgets import (
 from .layout import Side
 from .model import Topic
 from .qtutil import required
-from .style import (
-    FILLED_TEXT,
-    MAX_TEXT_WIDTH,
-    Style,
-    Z,
-    branch_color,
-    make_pen,
-    style_for,
-    theme,
-)
+from .render import TopicNode
+from .style import MAX_TEXT_WIDTH, Style, Z, make_pen, theme
 
 if TYPE_CHECKING:
     from .canvas import MindMapView
@@ -133,52 +125,58 @@ def layout_text(text: str, font: QFont) -> tuple[list[QTextLayout], float, float
     return layouts, MAX_TEXT_WIDTH, height
 
 
-def looks(topic: Topic) -> tuple[Style, QColor, QColor]:
-    """A topic's style, branch colour and text colour."""
-    style = style_for(topic)
-    return style, branch_color(topic), FILLED_TEXT if style.filled else theme().sub_text
-
-
 class TopicItem(QGraphicsItem):
     """A topic's body. Its text is painted directly; a ``TopicText`` exists only while editing."""
 
-    def __init__(self, topic: Topic, canvas: MindMapView) -> None:
+    def __init__(self, topic: Topic, node: TopicNode, canvas: MindMapView) -> None:
         super().__init__()
         self.topic = topic
+        self.node = node  # what this item last drew
         self.canvas = canvas
-        self.style, self.color, self.text_color = looks(topic)
         self.selected = False
         self.toggling = (
             False  # this press was a Ctrl+click: no drag, no narrowing on release
         )
         self.side = Side.CENTER
         self._w = self._h = 0.0
-        self.font = label_font(self.style.font_size, self.style.bold)
         self.label: TopicText | None = None  # the inline editor, while editing
         self._layouts: list[QTextLayout] = []
         self._text_rect = QRectF()
-        self._text = ""  # the text laid out in _layouts
-        self.set_text(topic.text)
+        self.set_text(node.text)
         self.setZValue(Z.TOPIC)
 
-    def bind(self, topic: Topic) -> None:
-        """Reuse this item for ``topic`` (the same topic, possibly rebuilt by undo), redoing
-        only the work its changes need."""
-        self.topic = topic
-        style, color, text_color = looks(topic)
-        restyled = style != self.style
-        if restyled or color != self.color or text_color != self.text_color:
-            self.style, self.color, self.text_color = style, color, text_color
-            self.font = label_font(style.font_size, style.bold)
+    @property
+    def style(self) -> Style:
+        return self.node.style
+
+    @property
+    def color(self) -> QColor:
+        return self.node.color
+
+    @property
+    def text_color(self) -> QColor:
+        return self.node.text_color
+
+    @property
+    def font(self) -> QFont:
+        return label_font(self.style.font_size, self.style.bold)
+
+    def patch(self, node: TopicNode) -> bool:
+        """Draw ``node`` instead of the last one, redoing only the work their differences
+        need; returns whether anything changed."""
+        old, self.node = self.node, node
+        if node == old:
+            return False
+        if node.text != old.text or node.style != old.style:
+            self.set_text(node.text)
+        else:
             self.update()
-        if restyled or topic.text != self._text:
-            self.set_text(topic.text)
+        return True
 
     def is_editing(self) -> bool:
         return self.label is not None
 
     def set_text(self, text: str) -> None:
-        self._text = text
         self._layouts, w, h = layout_text(text, self.font)
         self._set_text_size(w, h)
         self.update()
@@ -346,7 +344,6 @@ class FoldBadge(QGraphicsItem):
     def __init__(self, item: TopicItem) -> None:
         super().__init__()
         self.item = item
-        self.count = item.topic.descendant_count()
         self.setZValue(Z.FOLD_BADGE)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
@@ -370,7 +367,8 @@ class FoldBadge(QGraphicsItem):
         font.setBold(True)
         painter.setFont(font)
         painter.setPen(self.item.color)
-        text = str(self.count) if self.count <= self.MAX_COUNT else f"{self.MAX_COUNT}+"
+        count = self.item.node.hidden_count or 0
+        text = str(count) if count <= self.MAX_COUNT else f"{self.MAX_COUNT}+"
         painter.drawText(self.boundingRect(), Qt.AlignmentFlag.AlignCenter, text)
 
     def mousePressEvent(self, event: QGraphicsSceneMouseEvent | None) -> None:
