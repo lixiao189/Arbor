@@ -15,13 +15,12 @@ M = Qt.KeyboardModifier
 
 
 @pytest.fixture
-def win():
-    app = QApplication.instance() or QApplication([])
+def win(qapp):
     w = MainWindow()
     w.show()
     w.activateWindow()
     w.view.setFocus()
-    app.processEvents()
+    qapp.processEvents()
     yield w
     w.view.cancel_edit()
     w.view.undo_stack.setClean()
@@ -127,10 +126,9 @@ def test_copy_paste(win):
     assert pasted.parent is v.root.children[1]
 
 
-def test_destroying_dirty_window_does_not_touch_deleted_window():
+def test_destroying_dirty_window_does_not_touch_deleted_window(qapp):
     from PyQt6.QtCore import QCoreApplication, QEvent
 
-    app = QApplication.instance() or QApplication([])
     errors = []
     old_hook = sys.excepthook
     sys.excepthook = lambda *exc: errors.append(exc)
@@ -141,7 +139,7 @@ def test_destroying_dirty_window_does_not_touch_deleted_window():
         w.deleteLater()
         del w
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
-        app.processEvents()
+        qapp.processEvents()
     finally:
         sys.excepthook = old_hook
     assert not errors

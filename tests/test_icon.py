@@ -10,9 +10,8 @@ ICON_SIZES = [16, 24, 32, 48, 64, 128, 256]
 
 
 @pytest.fixture
-def app():
-    app = QApplication.instance() or QApplication([])
-    yield app
+def app(qapp):
+    yield qapp
     QApplication.setWindowIcon(QIcon())
     QApplication.setDesktopFileName("")
 
