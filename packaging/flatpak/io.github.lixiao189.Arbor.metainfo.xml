@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.lixiao189.Arbor</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <name>Arbor</name>
+  <summary>Keyboard-first mind map editor</summary>
+  <description>
+    <p>
+      Arbor is a small mind map editor with XMind's key bindings, so you can grow
+      a map as fast as you can type: Tab adds a subtopic, Enter adds a sibling, and
+      the arrow keys move around the tree.
+    </p>
+    <p>
+      Drag topics to rearrange them, select several at once, collapse branches,
+      paste plain-text outlines as topics, and undo any change. Maps are saved as
+      plain JSON .mind files.
+    </p>
+  </description>
+  <developer id="io.github.lixiao189">
+    <name>Node Sans</name>
+  </developer>
+  <url type="homepage">https://github.com/lixiao189/Arbor</url>
+  <url type="bugtracker">https://github.com/lixiao189/Arbor/issues</url>
+  <launchable type="desktop-id">io.github.lixiao189.Arbor.desktop</launchable>
+  <categories>
+    <category>Office</category>
+  </categories>
+  <content_rating type="oars-1.1"/>
+</component>

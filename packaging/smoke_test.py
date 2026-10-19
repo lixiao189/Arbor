@@ -1,8 +1,10 @@
 """Launch a built Arbor bundle and check that it starts and stays up.
 
-Usage: python packaging/smoke_test.py <path to the Arbor executable>
+Usage: python packaging/smoke_test.py <command that starts Arbor>...
 
-The bundle drops Qt's offscreen platform plugin, so this needs a real display
+For example the bundle's executable, or `flatpak run io.github.lixiao189.Arbor`.
+
+The bundles drop Qt's offscreen platform plugin, so this needs a real display
 (xvfb-run on Linux; the macOS and Windows runners have a desktop session).
 """
 
@@ -13,7 +15,7 @@ STARTUP_SECONDS = 10
 
 
 def main() -> None:
-    proc = subprocess.Popen([sys.argv[1]])
+    proc = subprocess.Popen(sys.argv[1:])
     try:
         code = proc.wait(timeout=STARTUP_SECONDS)
     except subprocess.TimeoutExpired:

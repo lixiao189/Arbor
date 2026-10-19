@@ -14,13 +14,13 @@ Arbor is in alpha. The latest [nightly build](https://github.com/lixiao189/Arbor
 
 - [macOS (Apple Silicon)](https://github.com/lixiao189/Arbor/releases/download/nightly/Arbor-macos-arm64.zip) – unsigned; right-click the app and choose Open the first time
 - [Windows (x86_64)](https://github.com/lixiao189/Arbor/releases/download/nightly/Arbor-windows-x86_64.zip)
-- [Linux (x86_64)](https://github.com/lixiao189/Arbor/releases/download/nightly/Arbor-linux-x86_64.tar.gz)
-- [Linux (aarch64)](https://github.com/lixiao189/Arbor/releases/download/nightly/Arbor-linux-aarch64.tar.gz)
+- [Linux (x86_64)](https://github.com/lixiao189/Arbor/releases/download/nightly/Arbor-linux-x86_64.flatpak) – Flatpak bundle
+- [Linux (aarch64)](https://github.com/lixiao189/Arbor/releases/download/nightly/Arbor-linux-aarch64.flatpak) – Flatpak bundle
 
-On Linux, to add Arbor to your desktop's app list, extract the archive somewhere permanent, then run from the extracted `Arbor` folder:
+On Linux, open the `.flatpak` file with your software centre, or install it from a terminal (it fetches the runtime from Flathub):
 
 ```bash
-ln -s "$PWD/Arbor" ~/.local/bin/arbor && cp -r share ~/.local/
+flatpak install --user Arbor-linux-x86_64.flatpak
 ```
 
 ## Quick start

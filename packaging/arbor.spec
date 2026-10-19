@@ -45,12 +45,9 @@ LIBPYTHON_STRIP_ARGS = ["-x"] if sys.platform == "darwin" else None
 ICNS_SCRIPT = Path(SPECPATH, "icon", "make_icns.py")
 ICO_SCRIPT = Path(SPECPATH, "icon", "make_ico.py")
 
-# The window icon PNGs (see arbor/icon.py), unused on macOS. The Linux build
-# also installs them, with arbor.desktop, under share/ in the bundle, laid out
-# so that copying share/ into ~/.local adds Arbor to the desktop's app list.
+# The window icon PNGs (see arbor/icon.py), unused on macOS.
 WINDOW_ICONS = Path(SPECPATH).parent / "src" / "arbor" / "icons"
 WINDOW_ICONS_DEST = "arbor/icons"
-DESKTOP_FILE = Path(SPECPATH, "linux", "arbor.desktop")
 
 # The Icon Composer icon, which gives macOS 26+ the Liquid Glass icon and its
 # dark, clear and tinted variants. Compiling it into Assets.car needs the actool
@@ -125,22 +122,6 @@ def make_ico():
     return str(ico)
 
 
-def install_desktop_entry(bundle):
-    """Add arbor.desktop and the hicolor icons to the Linux bundle's share/."""
-    if not sys.platform.startswith("linux"):
-        return
-    share = Path(bundle, "share")
-    shutil.rmtree(share, ignore_errors=True)
-    applications = share / "applications"
-    applications.mkdir(parents=True)
-    shutil.copy(DESKTOP_FILE, applications)
-    for png in WINDOW_ICONS.glob("arbor-*.png"):
-        size = png.stem.removeprefix("arbor-")
-        apps = share / "icons" / "hicolor" / f"{size}x{size}" / "apps"
-        apps.mkdir(parents=True)
-        shutil.copy(png, apps / "arbor.png")
-
-
 def actool_major_version():
     """Major version of Xcode's actool, or None if only the Command Line Tools are installed."""
     if subprocess.run(["xcrun", "--find", "actool"], capture_output=True).returncode != 0:
@@ -195,7 +176,6 @@ exe = EXE(
     icon=make_ico(),
 )
 coll = COLLECT(exe, a.binaries, a.datas, strip=STRIP, name="Arbor")
-install_desktop_entry(Path(DISTPATH, "Arbor"))
 
 # With an Assets.car, macOS takes the icon named by CFBundleIconName from it;
 # the .icns (CFBundleIconFile, which BUNDLE sets from `icon`) stays as the
