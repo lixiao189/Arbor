@@ -44,6 +44,18 @@ Key mechanics that span files:
 
 - **No magic numbers.** Don't encode states or categories as bare literals (`side == 0`, `side or 1`, `> 0` to mean "right"). Use an enum (e.g. `layout.Side`, an `IntEnum` so it still works as an x direction) or a named module-level constant. Sizes, gaps and colours go in named constants like `H_GAP` or the `Style` fields, not inline in drawing code.
 
+## Git workflow
+
+- `AGENTS.md` is a symlink to this file. Edit `CLAUDE.md` to update these instructions and preserve the symlink.
+- Before making changes, inspect the working tree and current branch. Preserve unrelated user changes; stage only files belonging to the task and review the staged diff before committing.
+- Make changes on a descriptive topic branch based on the latest `origin/master`. Fetch before creating the branch when network access is available; never discard local changes to update the base.
+- Requests to commit authorize a local commit. Requests to push authorize pushing the topic branch; they do not authorize a direct push to `master` or a merge. Create a PR targeting `master` when asked to submit the changes for review or integration.
+- Before pushing, inspect `.github/workflows/` and run checks appropriate to the change. For application code, run `uv run --locked pytest` and `uv run --locked ty check`. For workflow changes, also run actionlint. Documentation-only changes need a diff/whitespace review; required CI checks still apply.
+- All changes, including documentation, must reach `master` through a PR. Never push directly to `master`, bypass branch protection or required checks, use an administrator merge override, or weaken repository rules to complete a task. Possession of bypass permissions is not authorization to use them.
+- Before merging, confirm all required checks have passed for the latest PR commit and any required reviews are satisfied. Pending, missing, skipped, or failed checks do not count as passing. Use the repository's normal auto-merge flow when integration is authorized; do not bypass checks if auto-merge is unavailable.
+- Do not force-push shared branches or rewrite published history without explicit authorization. If a push unexpectedly reports bypassed rules, report it immediately and stop further integration actions; do not undo it with a reset or force-push on your own.
+- Report the commit or PR, validation performed, and any checks still pending. Distinguish a pushed branch from a merged PR.
+
 ## Tests
 
 - `test_model.py` and `test_layout.py` are pure-Python.
